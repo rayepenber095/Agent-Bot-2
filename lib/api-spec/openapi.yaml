@@ -3,20 +3,29 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VulnLab Pro API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: users
+  - name: products
+  - name: channels
+  - name: messages
+  - name: orders
+  - name: transactions
+  - name: social
+  - name: admin
+  - name: debug
+  - name: uploads
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +33,1035 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── AUTH ──────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "200":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthPayload"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthPayload"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # ── USERS ─────────────────────────────────────────────────────
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      operationId: updateUser
+      tags: [users]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /users/{id}/follow:
+    post:
+      operationId: followUser
+      tags: [users]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Followed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+    delete:
+      operationId: unfollowUser
+      tags: [users]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Unfollowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  # ── PRODUCTS ─────────────────────────────────────────────────
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    put:
+      operationId: updateProduct
+      tags: [products]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /products/fetch-image:
+    post:
+      operationId: fetchProductImage
+      tags: [products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FetchImageInput"
+      responses:
+        "200":
+          description: Image fetched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FetchImageResult"
+
+  # ── CART & ORDERS ────────────────────────────────────────────
+  /cart:
+    get:
+      operationId: getCart
+      tags: [orders]
+      responses:
+        "200":
+          description: Cart items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CartItem"
+    post:
+      operationId: addToCart
+      tags: [orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CartInput"
+      responses:
+        "200":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /cart/{productId}:
+    delete:
+      operationId: removeFromCart
+      tags: [orders]
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+    post:
+      operationId: checkout
+      tags: [orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutInput"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  # ── CHANNELS & MESSAGES ───────────────────────────────────────
+  /channels:
+    get:
+      operationId: listChannels
+      tags: [channels]
+      responses:
+        "200":
+          description: Channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Channel"
+    post:
+      operationId: createChannel
+      tags: [channels]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+  /channels/{id}:
+    get:
+      operationId: getChannel
+      tags: [channels]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+  /channels/{id}/join:
+    post:
+      operationId: joinChannel
+      tags: [channels]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /channels/{id}/leave:
+    post:
+      operationId: leaveChannel
+      tags: [channels]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Left
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /channels/{id}/messages:
+    get:
+      operationId: listChannelMessages
+      tags: [messages]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+  /messages/search:
+    get:
+      operationId: searchMessages
+      tags: [messages]
+      parameters:
+        - in: query
+          name: channelId
+          schema:
+            type: string
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+  /dm/{userId}:
+    get:
+      operationId: getDirectMessages
+      tags: [messages]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: DMs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DirectMessage"
+    post:
+      operationId: sendDirectMessage
+      tags: [messages]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  # ── TRANSACTIONS ──────────────────────────────────────────────
+  /transactions:
+    get:
+      operationId: listTransactions
+      tags: [transactions]
+      responses:
+        "200":
+          description: Transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+  /transactions/{id}:
+    get:
+      operationId: getTransaction
+      tags: [transactions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+  /transactions/transfer:
+    post:
+      operationId: transfer
+      tags: [transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferInput"
+      responses:
+        "200":
+          description: Transfer result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  # ── SOCIAL ────────────────────────────────────────────────────
+  /feed:
+    get:
+      operationId: getFeed
+      tags: [social]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Post"
+  /posts:
+    post:
+      operationId: createPost
+      tags: [social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+  /posts/{id}:
+    get:
+      operationId: getPost
+      tags: [social]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+    delete:
+      operationId: deletePost
+      tags: [social]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /posts/{id}/like:
+    post:
+      operationId: likePost
+      tags: [social]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Liked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /posts/{id}/comments:
+    get:
+      operationId: getComments
+      tags: [social]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Comment"
+    post:
+      operationId: addComment
+      tags: [social]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentInput"
+      responses:
+        "201":
+          description: Comment added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+
+  # ── ADMIN ─────────────────────────────────────────────────────
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      responses:
+        "200":
+          description: All users (with sensitive data)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+  /admin/users/{id}/balance:
+    patch:
+      operationId: adminUpdateBalance
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BalanceUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /admin/users/{id}/role:
+    patch:
+      operationId: adminUpdateRole
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /admin/users/{id}:
+    delete:
+      operationId: adminDeleteUser
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /admin/users/{id}/lock:
+    post:
+      operationId: adminLockUser
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /admin/users/{id}/unlock:
+    post:
+      operationId: adminUnlockUser
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Unlocked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /admin/security-mode:
+    post:
+      operationId: setSecurityMode
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecurityModeInput"
+      responses:
+        "200":
+          description: Mode changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+    get:
+      operationId: getSecurityMode
+      tags: [admin]
+      responses:
+        "200":
+          description: Current mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityModeStatus"
+  /admin/logs:
+    get:
+      operationId: getRequestLogs
+      tags: [admin]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+        - in: query
+          name: type
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RequestLog"
+  /admin/security-events:
+    get:
+      operationId: getSecurityEvents
+      tags: [admin]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Security events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RequestLog"
+
+  # ── DEBUG (vulnerable mode only) ──────────────────────────────
+  /debug/ping:
+    get:
+      operationId: debugPing
+      tags: [debug]
+      parameters:
+        - in: query
+          name: host
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ping result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebugResult"
+  /debug/env:
+    get:
+      operationId: debugEnv
+      tags: [debug]
+      responses:
+        "200":
+          description: Env vars
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebugResult"
+  /debug/version:
+    get:
+      operationId: debugVersion
+      tags: [debug]
+      responses:
+        "200":
+          description: Package info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebugResult"
+  /debug/eval:
+    post:
+      operationId: debugEval
+      tags: [debug]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvalInput"
+      responses:
+        "200":
+          description: Eval result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebugResult"
+
+  # ── WEBHOOKS & REDIRECT ───────────────────────────────────────
+  /webhooks/test:
+    post:
+      operationId: testWebhook
+      tags: [debug]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookInput"
+      responses:
+        "200":
+          description: Webhook sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /redirect:
+    get:
+      operationId: openRedirect
+      tags: [debug]
+      parameters:
+        - in: query
+          name: url
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect
+
+  # ── FILES ─────────────────────────────────────────────────────
+  /files/download:
+    get:
+      operationId: downloadFile
+      tags: [uploads]
+      parameters:
+        - in: query
+          name: name
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File content
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +1069,519 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+      required: [ok]
+
+    AuthPayload:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        expiresIn:
+          type: ["integer", "null"]
+      required: [token, user]
+
+    RegisterInput:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+      required: [username, email, password]
+
+    LoginInput:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required: [username, password]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: ["string", "null"]
+        full_name:
+          type: ["string", "null"]
+        avatar_url:
+          type: ["string", "null"]
+        bio:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        role:
+          type: string
+        balance:
+          type: ["number", "null"]
+        ssn:
+          type: ["string", "null"]
+        secret_note:
+          type: ["string", "null"]
+        password_plain:
+          type: ["string", "null"]
+        is_active:
+          type: boolean
+        is_locked:
+          type: boolean
+        failed_logins:
+          type: integer
+        last_login:
+          type: ["string", "null"]
+        created_at:
+          type: string
+        followers_count:
+          type: ["integer", "null"]
+        following_count:
+          type: ["integer", "null"]
+      required: [id, username, role, is_active, is_locked, failed_logins, created_at]
+
+    UserUpdate:
+      type: object
+      properties:
+        full_name:
+          type: string
+        bio:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        avatar_url:
+          type: string
+        role:
+          type: string
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        price:
+          type: number
+        original_price:
+          type: ["number", "null"]
+        stock:
+          type: integer
+        category:
+          type: ["string", "null"]
+        brand:
+          type: ["string", "null"]
+        sku:
+          type: ["string", "null"]
+        image_url:
+          type: ["string", "null"]
+        seller_id:
+          type: ["integer", "null"]
+        seller:
+          $ref: "#/components/schemas/User"
+        is_active:
+          type: boolean
+        rating:
+          type: ["number", "null"]
+        created_at:
+          type: string
+      required: [id, name, price, stock, is_active, created_at]
+
+    ProductInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        original_price:
+          type: number
+        stock:
+          type: integer
+        category:
+          type: string
+        brand:
+          type: string
+        image_url:
+          type: string
+      required: [name, price, stock]
+
+    FetchImageInput:
+      type: object
+      properties:
+        imageUrl:
+          type: string
+      required: [imageUrl]
+
+    FetchImageResult:
+      type: object
+      properties:
+        url:
+          type: string
+        saved:
+          type: boolean
+      required: [url, saved]
+
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_id:
+          type: integer
+        product:
+          $ref: "#/components/schemas/Product"
+        quantity:
+          type: integer
+      required: [id, product_id, quantity]
+
+    CartInput:
+      type: object
+      properties:
+        productId:
+          type: integer
+        quantity:
+          type: integer
+      required: [productId, quantity]
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        buyer_id:
+          type: integer
+        buyer:
+          $ref: "#/components/schemas/User"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        total:
+          type: number
+        status:
+          type: string
+        shipping_address:
+          type: ["string", "null"]
+        created_at:
+          type: string
+      required: [id, buyer_id, total, status, created_at]
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_id:
+          type: integer
+        product:
+          $ref: "#/components/schemas/Product"
+        quantity:
+          type: integer
+        price_at_purchase:
+          type: number
+      required: [id, product_id, quantity, price_at_purchase]
+
+    CheckoutInput:
+      type: object
+      properties:
+        shippingAddress:
+          type: string
+
+    Channel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        is_private:
+          type: boolean
+        created_by:
+          type: ["integer", "null"]
+        creator:
+          $ref: "#/components/schemas/User"
+        member_count:
+          type: integer
+        message_count:
+          type: integer
+        created_at:
+          type: string
+      required: [id, name, slug, is_private, created_at]
+
+    ChannelInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        isPrivate:
+          type: boolean
+      required: [name]
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+        channel_id:
+          type: integer
+        sender_id:
+          type: integer
+        sender:
+          $ref: "#/components/schemas/User"
+        content:
+          type: string
+        file_url:
+          type: ["string", "null"]
+        file_name:
+          type: ["string", "null"]
+        is_deleted:
+          type: boolean
+        is_pinned:
+          type: boolean
+        created_at:
+          type: string
+      required: [id, channel_id, sender_id, content, is_deleted, is_pinned, created_at]
+
+    DirectMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        sender_id:
+          type: integer
+        receiver_id:
+          type: integer
+        sender:
+          $ref: "#/components/schemas/User"
+        content:
+          type: string
+        is_read:
+          type: boolean
+        created_at:
+          type: string
+      required: [id, sender_id, receiver_id, content, is_read, created_at]
+
+    MessageInput:
+      type: object
+      properties:
+        content:
+          type: string
+        fileUrl:
+          type: string
+      required: [content]
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        sender_id:
+          type: ["integer", "null"]
+        receiver_id:
+          type: ["integer", "null"]
+        sender:
+          $ref: "#/components/schemas/User"
+        receiver:
+          $ref: "#/components/schemas/User"
+        amount:
+          type: number
+        type:
+          type: string
+        status:
+          type: string
+        note:
+          type: ["string", "null"]
+        reference:
+          type: ["string", "null"]
+        created_at:
+          type: string
+      required: [id, amount, type, status, created_at]
+
+    TransferInput:
+      type: object
+      properties:
+        toUsername:
+          type: string
+        amount:
+          type: number
+        note:
+          type: string
+      required: [toUsername, amount]
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+        author_id:
+          type: integer
+        author:
+          $ref: "#/components/schemas/User"
+        content:
+          type: string
+        image_url:
+          type: ["string", "null"]
+        like_count:
+          type: integer
+        comment_count:
+          type: integer
+        liked_by_me:
+          type: boolean
+        created_at:
+          type: string
+      required: [id, author_id, content, like_count, comment_count, liked_by_me, created_at]
+
+    Comment:
+      type: object
+      properties:
+        id:
+          type: integer
+        post_id:
+          type: integer
+        author_id:
+          type: integer
+        author:
+          $ref: "#/components/schemas/User"
+        content:
+          type: string
+        created_at:
+          type: string
+      required: [id, post_id, author_id, content, created_at]
+
+    PostInput:
+      type: object
+      properties:
+        content:
+          type: string
+        imageUrl:
+          type: string
+      required: [content]
+
+    CommentInput:
+      type: object
+      properties:
+        content:
+          type: string
+      required: [content]
+
+    SecurityModeInput:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [vulnerable, hardened]
+      required: [mode]
+
+    SecurityModeStatus:
+      type: object
+      properties:
+        mode:
+          type: string
+        app_name:
+          type: string
+        allow_register:
+          type: boolean
+        updated_at:
+          type: ["string", "null"]
+      required: [mode, app_name, allow_register]
+
+    BalanceUpdate:
+      type: object
+      properties:
+        delta:
+          type: number
+        note:
+          type: string
+      required: [delta]
+
+    RoleUpdate:
+      type: object
+      properties:
+        role:
+          type: string
+      required: [role]
+
+    RequestLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        timestamp:
+          type: string
+        event_type:
+          type: string
+        method:
+          type: ["string", "null"]
+        path:
+          type: ["string", "null"]
+        user_id:
+          type: ["integer", "null"]
+        username:
+          type: ["string", "null"]
+        ip_address:
+          type: ["string", "null"]
+        status_code:
+          type: ["integer", "null"]
+        duration_ms:
+          type: ["integer", "null"]
+        is_suspicious:
+          type: boolean
+        severity:
+          type: string
+        details:
+          type: ["string", "null"]
+      required: [id, timestamp, event_type, is_suspicious, severity]
+
+    DebugResult:
+      type: object
+      properties:
+        output:
+          type: string
+        error:
+          type: ["string", "null"]
+      required: [output]
+
+    EvalInput:
+      type: object
+      properties:
+        code:
+          type: string
+      required: [code]
+
+    WebhookInput:
+      type: object
+      properties:
+        url:
+          type: string
+        payload:
+          type: object
+      required: [url]
