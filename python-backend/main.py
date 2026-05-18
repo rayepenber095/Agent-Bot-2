@@ -374,10 +374,6 @@ class TransferInput(BaseModel):
     note: Optional[str] = None
 
 
-class GenericMap(BaseModel):
-    __root__: dict[str, Any]
-
-
 create_schema()
 seed_data()
 

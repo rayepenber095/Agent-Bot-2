@@ -39,6 +39,40 @@ A full-stack **intentionally vulnerable** cybersecurity training platform coveri
 
 ---
 
+## Run with Python backend
+
+This repository now includes a Python API implementation at:
+
+- `/home/runner/work/Agent-Bot-2/Agent-Bot-2/python-backend/main.py`
+
+### 1. Create and activate a Python venv
+
+```bash
+cd /home/runner/work/Agent-Bot-2/Agent-Bot-2
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r python-backend/requirements.txt
+```
+
+### 2. Start the Python API (port 8080)
+
+```bash
+PORT=8080 BASE_PATH=/api \
+  uvicorn python-backend.main:asgi_app --host 0.0.0.0 --port 8080
+```
+
+### 3. Start the frontend (port 3000)
+
+```bash
+pnpm install
+PORT=3000 BASE_PATH=/ \
+  pnpm --filter @workspace/vulnlab-pro run dev
+```
+
+The frontend will call the Python backend at `/api/*` and Socket.IO at `/api/socket.io`.
+
+---
+
 ## Local Setup on Kali Linux
 
 ### 1. Install Node.js 20+ (via nvm — recommended)
