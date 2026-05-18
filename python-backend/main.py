@@ -588,9 +588,23 @@ async def update_user(id: str, request: Request):
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     with db_conn() as conn:
-        sets = ", ".join(f"{k}=?" for k in updates)
-        args = list(updates.values()) + [id]
-        conn.execute(f"UPDATE users SET {sets}, updated_at=? WHERE id=?", list(updates.values()) + [now_iso(), id])
+        current = conn.execute("SELECT * FROM users WHERE id=?", (id,)).fetchone()
+        if not current:
+            raise HTTPException(status_code=404, detail="User not found")
+        full_name = updates.get("full_name", current["full_name"])
+        bio = updates.get("bio", current["bio"])
+        phone = updates.get("phone", current["phone"])
+        address = updates.get("address", current["address"])
+        avatar_url = updates.get("avatar_url", current["avatar_url"])
+        role = updates.get("role", current["role"])
+        conn.execute(
+            """
+            UPDATE users
+            SET full_name=?, bio=?, phone=?, address=?, avatar_url=?, role=?, updated_at=?
+            WHERE id=?
+            """,
+            (full_name, bio, phone, address, avatar_url, role, now_iso(), id),
+        )
         row = conn.execute("SELECT * FROM users WHERE id=?", (id,)).fetchone()
     return row_to_user(row, include_sensitive=(mode == "vulnerable"))
 
@@ -697,15 +711,25 @@ async def update_product(id: str, request: Request):
             raise HTTPException(status_code=404, detail="Product not found")
         if mode == "hardened" and int(row["seller_id"] or 0) != int(user["id"]) and user["role"] not in {"admin", "sudo"}:
             raise HTTPException(status_code=403, detail="Not authorized to edit this product")
-        fields = ["name", "description", "price", "original_price", "stock", "category", "brand", "image_url"]
-        updates = {k: body.get(k) for k in fields if k in body}
-        if "imageUrl" in body:
-            updates["image_url"] = body["imageUrl"]
-        if updates:
-            conn.execute(
-                f"UPDATE products SET {', '.join(f'{k}=?' for k in updates)} WHERE id=?",
-                list(updates.values()) + [id],
-            )
+        image_url = body.get("image_url", body.get("imageUrl", row["image_url"]))
+        conn.execute(
+            """
+            UPDATE products
+            SET name=?, description=?, price=?, original_price=?, stock=?, category=?, brand=?, image_url=?
+            WHERE id=?
+            """,
+            (
+                body.get("name", row["name"]),
+                body.get("description", row["description"]),
+                body.get("price", row["price"]),
+                body.get("original_price", row["original_price"]),
+                body.get("stock", row["stock"]),
+                body.get("category", row["category"]),
+                body.get("brand", row["brand"]),
+                image_url,
+                id,
+            ),
+        )
         row = conn.execute("SELECT * FROM products WHERE id=?", (id,)).fetchone()
         return product_with_seller(conn, row)
 
@@ -927,10 +951,7 @@ def list_transactions(request: Request):
     user = require_auth(request)
     uid = user["id"]
     if mode == "vulnerable":
-        try:
-            uid = int(request.query_params.get("userId", uid))
-        except Exception:
-            uid = user["id"]
+        uid = request.query_params.get("userId", uid)
     with db_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM transactions WHERE sender_id=? OR receiver_id=? ORDER BY created_at DESC LIMIT 50",
@@ -1075,7 +1096,7 @@ def list_orders(request: Request):
     user = require_auth(request)
     uid = user["id"]
     if mode == "vulnerable":
-        uid = int(request.query_params.get("userId", uid))
+        uid = request.query_params.get("userId", uid)
     with db_conn() as conn:
         rows = conn.execute("SELECT * FROM orders WHERE buyer_id=? ORDER BY created_at DESC", (uid,)).fetchall()
         return [hydrate_order(conn, r) for r in rows]
@@ -1452,6 +1473,7 @@ def download_file(request: Request, name: Optional[str] = None):
 
     if request.state.security_mode == "vulnerable":
         # Intentionally vulnerable for training: path traversal demo.
+        # This is deliberately weak and can be bypassed (e.g. encoded traversal patterns).
         try_paths = [uploads_dir / name, Path("/") / name.replace("../", "")]
         for p in try_paths:
             if p.exists() and p.is_file():
