@@ -77,10 +77,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Security Mode Toggle */}
+        {/* Security Mode Toggle — admin/sudo/moderator only */}
         <div className="px-2 py-3 border-b border-[#30363d]">
           <button
             onClick={handleToggleMode}
+            disabled={!user || !["admin", "sudo", "moderator"].includes(user.role)}
+            title={!user || !["admin", "sudo", "moderator"].includes(user.role) ? "Admin only" : undefined}
             className={cn(
               "w-full flex items-center gap-2 rounded-md px-2 py-2 text-xs font-semibold transition-colors",
               isVuln

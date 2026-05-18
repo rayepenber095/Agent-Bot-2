@@ -5,7 +5,13 @@ import { getAppSettings, invalidateSecurityModeCache } from "../lib/security.js"
 
 const router = Router();
 
-// All admin routes require auth + admin role
+// ─── SECURITY MODE (GET is auth-only — all users need to know current mode) ──
+router.get("/security-mode", requireAuth, async (req, res) => {
+  const settings = await getAppSettings();
+  res.json(settings);
+});
+
+// All other admin routes require auth + admin role
 router.use(requireAuth, requireAdmin);
 
 // ─── LIST ALL USERS (with sensitive data) ─────────────────────
@@ -74,10 +80,6 @@ router.post("/security-mode", async (req, res) => {
   res.json({ ok: true, message: `Security mode set to: ${mode}` });
 });
 
-router.get("/security-mode", async (req, res) => {
-  const settings = await getAppSettings();
-  res.json(settings);
-});
 
 // ─── REQUEST LOGS ─────────────────────────────────────────────
 router.get("/logs", async (req, res) => {

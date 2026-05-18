@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/axios";
 
 interface SecurityContextValue {
@@ -12,12 +13,18 @@ interface SecurityContextValue {
 const SecurityContext = createContext<SecurityContextValue | null>(null);
 
 export function SecurityProvider({ children }: { children: ReactNode }) {
+  const { token } = useAuth();
   const [mode, setModeState] = useState<"vulnerable" | "hardened">("vulnerable");
   const [appName, setAppName] = useState("VulnLab Pro");
   const [isLoading, setIsLoading] = useState(true);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
     api
       .get("/admin/security-mode")
       .then((res) => {
@@ -26,7 +33,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
-  }, [tick]);
+  }, [token, tick]);
 
   const setMode = (m: "vulnerable" | "hardened") => setModeState(m);
   const refetch = () => setTick((t) => t + 1);

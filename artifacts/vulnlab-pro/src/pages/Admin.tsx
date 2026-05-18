@@ -209,7 +209,7 @@ export default function Admin() {
             <div key={log.id} className={cn("bg-[#161b22] border rounded-lg p-3 text-xs font-mono", log.is_suspicious ? "border-red-800/50" : "border-[#30363d]")} data-testid={`row-log-${log.id}`}>
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-gray-600">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                <span className={cn("font-semibold", SEVERITY_COLORS[log.severity])}>[{log.severity.toUpperCase()}]</span>
+                <span className={cn("font-semibold", SEVERITY_COLORS[log.severity ?? "low"])}>[{(log.severity ?? "low").toUpperCase()}]</span>
                 <span className="text-blue-400">{log.method} {log.path}</span>
                 {log.username && <span className="text-purple-400">{log.username}</span>}
                 {log.status_code && <span className={cn(log.status_code >= 400 ? "text-red-400" : "text-green-400")}>{log.status_code}</span>}
