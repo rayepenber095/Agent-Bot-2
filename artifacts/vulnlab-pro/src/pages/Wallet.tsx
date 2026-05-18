@@ -69,7 +69,7 @@ export default function Wallet() {
       )}>
         <p className="text-sm text-gray-400 mb-1">Available Balance</p>
         <p className="text-4xl font-bold text-white font-mono" data-testid="text-balance">
-          ${user?.balance?.toFixed(2) ?? "0.00"}
+          ${parseFloat(String(user?.balance ?? 0)).toFixed(2)}
         </p>
         <p className="text-xs text-gray-500 mt-2">{user?.username} · ID #{user?.id}</p>
       </div>

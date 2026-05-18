@@ -170,7 +170,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </span>
             {user && (
               <div className="text-xs text-gray-400">
-                ${user.balance?.toFixed(2) ?? "0.00"}
+                ${parseFloat(String(user.balance ?? 0)).toFixed(2)}
               </div>
             )}
           </div>

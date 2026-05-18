@@ -49,7 +49,7 @@ export default function Dashboard() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             Role: <span className="text-purple-400 font-mono">{user?.role}</span>
-            {" · "}Balance: <span className="text-green-400 font-mono">${user?.balance?.toFixed(2) ?? "0.00"}</span>
+            {" · "}Balance: <span className="text-green-400 font-mono">${parseFloat(String(user?.balance ?? 0)).toFixed(2)}</span>
           </p>
         </div>
         <div
@@ -69,7 +69,7 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Balance", value: `$${user?.balance?.toFixed(2) ?? "0.00"}`, color: "text-green-400" },
+          { label: "Balance", value: `$${parseFloat(String(user?.balance ?? 0)).toFixed(2)}`, color: "text-green-400" },
           { label: "Active Vulns", value: isVuln ? "10/10" : "0/10", color: isVuln ? "text-red-400" : "text-green-400" },
           { label: "OWASP Coverage", value: "100%", color: "text-blue-400" },
           { label: "Lab Mode", value: isVuln ? "VULN" : "SAFE", color: isVuln ? "text-red-400" : "text-green-400" },
