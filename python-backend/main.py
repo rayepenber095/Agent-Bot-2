@@ -303,7 +303,7 @@ def seed_data() -> None:
         channels_count = conn.execute("SELECT COUNT(*) AS c FROM channels").fetchone()["c"]
         if channels_count == 0:
             admin_id = conn.execute("SELECT id FROM users WHERE username='admin'").fetchone()["id"]
-            channels = [("general", "General chat"), ("exploits", "Exploit payloads"), ("off-topic", "Off topic")] 
+            channels = [("general", "General chat"), ("exploits", "Exploit payloads"), ("off-topic", "Off topic")]
             for name, desc in channels:
                 slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
                 cur = conn.execute(
