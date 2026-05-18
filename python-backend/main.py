@@ -989,7 +989,11 @@ async def transfer(request: Request):
     user = require_auth(request)
     body = await request.json()
     to_username = body.get("toUsername")
-    amount = float(body.get("amount"))
+    raw_amount = body.get("amount")
+    try:
+        amount = float(raw_amount)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="toUsername and amount are required")
     note = body.get("note")
     if not to_username:
         raise HTTPException(status_code=400, detail="toUsername and amount are required")
@@ -1307,7 +1311,11 @@ def admin_list_users(request: Request):
 async def admin_update_balance(id: str, request: Request):
     require_admin(request)
     body = await request.json()
-    delta = float(body.get("delta"))
+    raw_delta = body.get("delta")
+    try:
+        delta = float(raw_delta)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="delta required")
     note = body.get("note") or "Admin balance adjustment"
     with db_conn() as conn:
         conn.execute("UPDATE users SET balance = balance + ? WHERE id=?", (delta, id))
