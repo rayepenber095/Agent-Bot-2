@@ -43,12 +43,12 @@ A full-stack **intentionally vulnerable** cybersecurity training platform coveri
 
 This repository now includes a Python API implementation at:
 
-- `/home/runner/work/Agent-Bot-2/Agent-Bot-2/python-backend/main.py`
+- `python-backend/main.py`
 
 ### 1. Create and activate a Python venv
 
 ```bash
-cd /home/runner/work/Agent-Bot-2/Agent-Bot-2
+cd <project-root>
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r python-backend/requirements.txt

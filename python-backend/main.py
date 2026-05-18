@@ -58,6 +58,12 @@ def verify_password(raw: str, encoded: str) -> bool:
         return False
 
 
+def sanitize_text_hardened(text: str) -> str:
+    # Keep this sanitizer simple and linear-time to avoid regex DoS risks.
+    escaped = text.replace("<", "&lt;").replace(">", "&gt;")
+    return escaped.replace("javascript:", "[REMOVED]").replace("JAVASCRIPT:", "[REMOVED]")
+
+
 def create_schema() -> None:
     with db_conn() as conn:
         conn.executescript(
@@ -833,7 +839,7 @@ def list_channel_messages(id: str, request: Request, limit: int = 50, offset: in
             sender = conn.execute("SELECT id, username, avatar_url, role FROM users WHERE id=?", (m["sender_id"],)).fetchone()
             content = m["content"]
             if mode == "hardened":
-                content = re.sub(r"<script.*?>.*?</script>", "[REMOVED]", content, flags=re.I | re.S)
+                content = sanitize_text_hardened(content)
             out.append({**dict(m), "is_deleted": bool(m["is_deleted"]), "is_pinned": bool(m["is_pinned"]), "content": content, "sender": dict(sender) if sender else None})
         return out
 
@@ -847,8 +853,7 @@ async def send_message(id: str, request: Request):
     if not content:
         raise HTTPException(status_code=400, detail="content required")
     if mode == "hardened":
-        content = re.sub(r"<script.*?>.*?</script>", "[REMOVED]", content, flags=re.I | re.S)
-        content = re.sub(r"javascript:", "[REMOVED]", content, flags=re.I)
+        content = sanitize_text_hardened(content)
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO messages (channel_id, sender_id, content, file_url, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -1157,7 +1162,7 @@ async def create_post(request: Request):
     if not content:
         raise HTTPException(status_code=400, detail="content required")
     if mode == "hardened":
-        content = re.sub(r"<script.*?>.*?</script>", "[REMOVED]", content, flags=re.I | re.S)
+        content = sanitize_text_hardened(content)
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO posts (author_id, content, image_url, created_at) VALUES (?, ?, ?, ?)",
@@ -1229,7 +1234,7 @@ async def add_comment(id: str, request: Request):
     if not content:
         raise HTTPException(status_code=400, detail="content required")
     if mode == "hardened":
-        content = re.sub(r"<script.*?>.*?</script>", "[REMOVED]", content, flags=re.I | re.S)
+        content = sanitize_text_hardened(content)
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO comments (post_id, author_id, content, created_at) VALUES (?, ?, ?, ?)",
@@ -1361,6 +1366,7 @@ def debug_ping(request: Request, host: Optional[str] = None):
     try:
         cmd = ["ping", "-c", "2", host]
         if mode == "vulnerable":
+            # Intentionally vulnerable for training: command injection demo.
             proc = subprocess.run(" ".join(cmd), shell=True, capture_output=True, text=True, timeout=8)
         else:
             proc = subprocess.run(cmd, shell=False, capture_output=True, text=True, timeout=8)
@@ -1397,6 +1403,7 @@ async def debug_eval(request: Request):
     if mode == "hardened":
         raise HTTPException(status_code=403, detail="This endpoint is disabled in hardened mode.")
     try:
+        # Intentionally vulnerable for training: RCE demo in vulnerable mode.
         result = str(eval(code))  # noqa: S307
         return {"output": result}
     except Exception as exc:
@@ -1419,6 +1426,7 @@ async def test_webhook(request: Request):
             if b in u:
                 raise HTTPException(status_code=400, detail="Internal URLs not allowed")
     try:
+        # Intentionally vulnerable for training when mode == vulnerable: SSRF demo.
         r = requests.post(url, json=payload, timeout=5)
         return {"ok": True, "message": f"Webhook sent. Status: {r.status_code}"}
     except Exception as exc:
@@ -1431,6 +1439,7 @@ def open_redirect(request: Request, url: Optional[str] = None):
         raise HTTPException(status_code=400, detail="url required")
     if request.state.security_mode == "hardened" and not (url.startswith("/") and not url.startswith("//")):
         raise HTTPException(status_code=400, detail="Only relative redirects are allowed")
+    # Intentionally vulnerable for training when mode == vulnerable: open redirect demo.
     return RedirectResponse(url)
 
 
@@ -1442,6 +1451,7 @@ def download_file(request: Request, name: Optional[str] = None):
     uploads_dir.mkdir(exist_ok=True)
 
     if request.state.security_mode == "vulnerable":
+        # Intentionally vulnerable for training: path traversal demo.
         try_paths = [uploads_dir / name, Path("/") / name.replace("../", "")]
         for p in try_paths:
             if p.exists() and p.is_file():
