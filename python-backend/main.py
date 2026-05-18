@@ -24,6 +24,9 @@ BASE_PATH = os.getenv("BASE_PATH", "/api").rstrip("/") or "/api"
 DB_PATH = Path(os.getenv("PYTHON_BACKEND_DB", "python-backend/vulnlab.db")).resolve()
 JWT_WEAK_SECRET = "secret"
 JWT_STRONG_SECRET = os.getenv("JWT_SECRET", "very_strong_secret_change_me_in_production_64bytes")
+ADMIN_ROLES = {"admin", "sudo", "moderator"}
+OWNER_OR_ADMIN_ROLES = {"admin", "sudo"}
+SUSPICIOUS_SUBSTRINGS = ("union select", "<script", "javascript:", "../", "169.254", "localhost")
 
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -417,7 +420,7 @@ async def security_mode_and_logging(request: Request, call_next):
 
     duration_ms = int((time.time() - start) * 1000)
     raw = f"{request.url.path} {request.url.query}"
-    suspicious = int(any(p in raw.lower() for p in ["union select", "<script", "javascript:", "../", "169.254", "localhost"]))
+    suspicious = int(any(p in raw.lower() for p in SUSPICIOUS_SUBSTRINGS))
     severity = "high" if suspicious or response.status_code >= 500 else ("medium" if response.status_code >= 400 else "low")
 
     with db_conn() as conn:
@@ -458,7 +461,7 @@ def require_auth(request: Request) -> dict[str, Any]:
 
 def require_admin(request: Request) -> dict[str, Any]:
     user = require_auth(request)
-    if user.get("role") in {"admin", "sudo", "moderator"}:
+    if user.get("role") in ADMIN_ROLES:
         return user
     if request.state.security_mode == "vulnerable" and request.headers.get("x-admin-override") == "true":
         return user
@@ -582,7 +585,7 @@ async def update_user(id: str, request: Request):
     if mode == "vulnerable":
         allowed.append("role")
     else:
-        if int(id) != int(actor["id"]) and actor["role"] not in {"admin", "sudo"}:
+        if int(id) != int(actor["id"]) and actor["role"] not in OWNER_OR_ADMIN_ROLES:
             raise HTTPException(status_code=403, detail="Cannot edit other user's profile")
     updates = {k: body.get(k) for k in allowed if k in body}
     if not updates:
@@ -709,7 +712,7 @@ async def update_product(id: str, request: Request):
         row = conn.execute("SELECT * FROM products WHERE id=?", (id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Product not found")
-        if mode == "hardened" and int(row["seller_id"] or 0) != int(user["id"]) and user["role"] not in {"admin", "sudo"}:
+        if mode == "hardened" and int(row["seller_id"] or 0) != int(user["id"]) and user["role"] not in OWNER_OR_ADMIN_ROLES:
             raise HTTPException(status_code=403, detail="Not authorized to edit this product")
         image_url = body.get("image_url", body.get("imageUrl", row["image_url"]))
         conn.execute(
@@ -742,7 +745,7 @@ def delete_product(id: str, request: Request):
         row = conn.execute("SELECT * FROM products WHERE id=?", (id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Not found")
-        if mode == "hardened" and int(row["seller_id"] or 0) != int(user["id"]) and user["role"] not in {"admin", "sudo"}:
+        if mode == "hardened" and int(row["seller_id"] or 0) != int(user["id"]) and user["role"] not in OWNER_OR_ADMIN_ROLES:
             raise HTTPException(status_code=403, detail="Not authorized")
         conn.execute("DELETE FROM products WHERE id=?", (id,))
     return {"ok": True}
@@ -1215,7 +1218,7 @@ def delete_post(id: str, request: Request):
         p = conn.execute("SELECT * FROM posts WHERE id=?", (id,)).fetchone()
         if not p:
             raise HTTPException(status_code=404, detail="Not found")
-        if mode == "hardened" and int(p["author_id"]) != int(user["id"]) and user["role"] not in {"admin", "sudo", "moderator"}:
+        if mode == "hardened" and int(p["author_id"]) != int(user["id"]) and user["role"] not in ADMIN_ROLES:
             raise HTTPException(status_code=403, detail="Not authorized")
         conn.execute("DELETE FROM posts WHERE id=?", (id,))
         conn.execute("DELETE FROM post_likes WHERE post_id=?", (id,))
@@ -1473,7 +1476,8 @@ def download_file(request: Request, name: Optional[str] = None):
 
     if request.state.security_mode == "vulnerable":
         # Intentionally vulnerable for training: path traversal demo.
-        # This is deliberately weak and can be bypassed (e.g. encoded traversal patterns).
+        # This is deliberately weak and bypassable via encoded traversal (`..%2f`),
+        # double-encoding, absolute paths, and separator tricks.
         try_paths = [uploads_dir / name, Path("/") / name.replace("../", "")]
         for p in try_paths:
             if p.exists() and p.is_file():
